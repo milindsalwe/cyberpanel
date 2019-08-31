@@ -8,20 +8,24 @@ import tarfile
 import shutil
 from mailUtilities import mailUtilities
 from processUtilities import ProcessUtilities
+from plogical.installUtilities import installUtilities
 
 class modSec:
+
     installLogPath = "/home/cyberpanel/modSecInstallLog"
     tempRulesFile = "/home/cyberpanel/tempModSecRules"
     mirrorPath = "cyberpanel.net"
 
-
     @staticmethod
-    def installModSec(install, modSecInstall):
+    def installModSec():
         try:
 
             mailUtilities.checkHome()
 
-            command = 'sudo yum install ols-modsecurity -y'
+            if ProcessUtilities.decideDistro() == ProcessUtilities.centos:
+                command = 'sudo yum install ols-modsecurity -y'
+            else:
+                command = 'sudo DEBIAN_FRONTEND=noninteractive apt-get install ols-modsecurity -y'
 
             cmd = shlex.split(command)
 
@@ -146,6 +150,8 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
 
                 conf.close()
 
+                installUtilities.reStartLiteSpeed()
+
                 print "1,None"
                 return
             else:
@@ -178,6 +184,8 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
 
                 conf.close()
 
+                installUtilities.reStartLiteSpeed()
+
                 print "1,None"
                 return
 
@@ -202,7 +210,7 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
             rulesFile.write(data)
             rulesFile.close()
 
-            print data
+            installUtilities.reStartLiteSpeed()
 
             print "1,None"
             return
@@ -212,11 +220,9 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
                 str(msg) + "  [saveModSecRules]")
             print "0," + str(msg)
 
-
     @staticmethod
     def setupComodoRules():
         try:
-
             if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
                 pathTOOWASPFolder = os.path.join(virtualHostUtilities.Server_root, "conf/modsec/comodo")
                 extractLocation = os.path.join(virtualHostUtilities.Server_root, "conf/modsec")
@@ -320,6 +326,7 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
 
                 conf.close()
 
+                installUtilities.reStartLiteSpeed()
                 print "1,None"
                 return
             else:
@@ -343,12 +350,13 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
                 command = 'sudo chown -R lsadm:lsadm /usr/local/lsws/conf'
                 subprocess.call(shlex.split(command))
 
+                installUtilities.reStartLiteSpeed()
                 print "1,None"
                 return
 
         except BaseException, msg:
             logging.CyberCPLogFileWriter.writeToFile(
-                str(msg) + "  [installOWASP]")
+                str(msg) + "  [installComodo]")
             print "0," + str(msg)
 
     @staticmethod
@@ -367,6 +375,7 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
                         conf.writelines(items)
 
                 conf.close()
+                installUtilities.reStartLiteSpeed()
 
                 print "1,None"
 
@@ -375,6 +384,8 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/rules.conf
                     shutil.rmtree('/usr/local/lsws/conf/comodo_litespeed')
                 except BaseException, msg:
                     logging.CyberCPLogFileWriter.writeToFile(str(msg) + ' [disableComodo]')
+
+                installUtilities.reStartLiteSpeed()
                 print "1,None"
 
 
@@ -463,6 +474,7 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/owasp/rules/RESPONSE-999-EXCL
                     conf.writelines(items)
 
             conf.close()
+            installUtilities.reStartLiteSpeed()
 
             print "1,None"
 
@@ -486,6 +498,7 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/owasp/rules/RESPONSE-999-EXCL
                     conf.writelines(items)
 
             conf.close()
+            installUtilities.reStartLiteSpeed()
 
             print "1,None"
 
@@ -498,17 +511,28 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/owasp/rules/RESPONSE-999-EXCL
     def disableRuleFile(fileName, packName):
         try:
 
-            confFile = os.path.join(virtualHostUtilities.Server_root, "conf/httpd_config.conf")
-            confData = open(confFile).readlines()
-            conf = open(confFile, 'w')
+            if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
+                confFile = os.path.join(virtualHostUtilities.Server_root, "conf/httpd_config.conf")
+                confData = open(confFile).readlines()
+                conf = open(confFile, 'w')
 
-            for items in confData:
-                if items.find('modsec/'+packName) > -1 and items.find(fileName) > -1:
-                    conf.write("#" + items)
-                else:
-                    conf.writelines(items)
+                for items in confData:
+                    if items.find('modsec/'+packName) > -1 and items.find(fileName) > -1:
+                        conf.write("#" + items)
+                    else:
+                        conf.writelines(items)
 
-            conf.close()
+                conf.close()
+
+            else:
+                path = '/usr/local/lsws/conf/comodo_litespeed/'
+                completePath = path + fileName
+                completePathBak = path + fileName + '.bak'
+
+                command = 'mv ' + completePath + ' ' + completePathBak
+                ProcessUtilities.executioner(command)
+
+            installUtilities.reStartLiteSpeed()
 
             print "1,None"
 
@@ -521,17 +545,27 @@ modsecurity_rules_file /usr/local/lsws/conf/modsec/owasp/rules/RESPONSE-999-EXCL
     def enableRuleFile(fileName, packName):
         try:
 
-            confFile = os.path.join(virtualHostUtilities.Server_root, "conf/httpd_config.conf")
-            confData = open(confFile).readlines()
-            conf = open(confFile, 'w')
+            if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
+                confFile = os.path.join(virtualHostUtilities.Server_root, "conf/httpd_config.conf")
+                confData = open(confFile).readlines()
+                conf = open(confFile, 'w')
 
-            for items in confData:
-                if items.find('modsec/' + packName) > -1 and items.find(fileName) > -1:
-                    conf.write(items.lstrip('#'))
-                else:
-                    conf.writelines(items)
+                for items in confData:
+                    if items.find('modsec/' + packName) > -1 and items.find(fileName) > -1:
+                        conf.write(items.lstrip('#'))
+                    else:
+                        conf.writelines(items)
 
-            conf.close()
+                conf.close()
+            else:
+                path = '/usr/local/lsws/conf/comodo_litespeed/'
+                completePath = path + fileName
+                completePathBak = path + fileName + '.bak'
+
+                command = 'mv ' + completePathBak + ' ' + completePath
+                ProcessUtilities.executioner(command)
+
+            installUtilities.reStartLiteSpeed()
 
             print "1,None"
 
@@ -554,6 +588,8 @@ def main():
 
     if args.function == "installModSecConfigs":
         modSec.installModSecConfigs()
+    elif args.function == "installModSec":
+        modSec.installModSec()
     elif args.function == "saveModSecConfigs":
         modSec.saveModSecConfigs(args.tempConfigPath)
     elif args.function == "saveModSecRules":

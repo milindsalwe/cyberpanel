@@ -390,7 +390,15 @@ app.controller('servicesManager', function ($scope, $http) {
 
         url = "/serverstatus/servicesStatus";
 
-        $http.post(url).then(ListInitialDatas, cantLoadInitialDatas);
+        var config = {
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        };
+
+        data = {};
+
+        $http.post(url, data, config).then(ListInitialDatas, cantLoadInitialDatas);
 
 
         function ListInitialDatas(response) {
@@ -409,8 +417,18 @@ app.controller('servicesManager', function ($scope, $http) {
                 $scope.olsStop = false;
             }
 
-            // Update SQL stats
+            if (response.data.status.docker) {
+                $scope.dockerStatus = "Running";
+                $scope.dockerStart = false;
+                $scope.dockerStop = true;
+            }
+            else {
+                $scope.dockerStatus = "Stopped";
+                $scope.dockerStart = true;
+                $scope.dockerStop = false;
+            }
 
+            // Update SQL stats
             if (response.data.status.mysql) {
                 $scope.sqlStatus = "Running";
                 $scope.sqlStats = true;
@@ -468,7 +486,7 @@ app.controller('servicesManager', function ($scope, $http) {
 
         }
 
-    };
+    }
     getServiceStatus();
 
     $scope.serviceAction = function (serviceName, action) {

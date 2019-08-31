@@ -136,15 +136,13 @@ class installUtilities:
     @staticmethod
     def reStartLiteSpeed():
         try:
-            FNULL = open(os.devnull, 'w')
 
             if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
                 command = "sudo systemctl restart lsws"
             else:
                 command = "sudo /usr/local/lsws/bin/lswsctrl restart"
 
-            cmd = shlex.split(command)
-            subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.normalExecutioner(command)
 
         except OSError, msg:
             logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [reStartLiteSpeed]")
@@ -153,6 +151,42 @@ class installUtilities:
             logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [reStartLiteSpeed]")
             return 0
         return 1
+
+    @staticmethod
+    def reStartLiteSpeedSocket():
+        try:
+
+            if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
+                command = "sudo systemctl restart lsws"
+            else:
+                command = "sudo /usr/local/lsws/bin/lswsctrl restart"
+
+            return ProcessUtilities.executioner(command)
+
+        except OSError, msg:
+            logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [reStartLiteSpeed]")
+            return 0
+        except ValueError, msg:
+            logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [reStartLiteSpeed]")
+            return 0
+
+    @staticmethod
+    def stopLiteSpeedSocket():
+        try:
+
+            if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
+                command = "sudo systemctl stop lsws"
+            else:
+                command = "sudo /usr/local/lsws/bin/lswsctrl stop"
+
+            return ProcessUtilities.executioner(command)
+
+        except OSError, msg:
+            logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [reStartLiteSpeed]")
+            return 0
+        except ValueError, msg:
+            logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [reStartLiteSpeed]")
+            return 0
 
 
     @staticmethod

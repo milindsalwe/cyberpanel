@@ -33,12 +33,15 @@ class phpUtilities:
                 writeToFile.writelines("PHP Extension Installed.\n")
                 writeToFile.close()
 
+                installUtilities.installUtilities.reStartLiteSpeed()
+
                 return 1
             except:
                 writeToFile = open(phpUtilities.installLogPath, 'a')
                 writeToFile.writelines("Can not be installed.\n")
                 writeToFile.close()
                 logging.CyberCPLogFileWriter.writeToFile("[Could not Install]")
+                installUtilities.installUtilities.reStartLiteSpeed()
                 return 0
         except BaseException, msg:
             logging.CyberCPLogFileWriter.writeToFile(str(msg) + "[installPHPExtension]")
@@ -64,12 +67,14 @@ class phpUtilities:
                 writeToFile = open(phpUtilities.installLogPath, 'a')
                 writeToFile.writelines("PHP Extension Removed.\n")
                 writeToFile.close()
+                installUtilities.installUtilities.reStartLiteSpeed()
                 return 1
             except:
                 writeToFile = open(phpUtilities.installLogPath, 'a')
                 writeToFile.writelines("Can not un-install Extension.\n")
                 writeToFile.close()
                 logging.CyberCPLogFileWriter.writeToFile("[Could not Install]")
+                installUtilities.installUtilities.reStartLiteSpeed()
                 return 0
 
         except BaseException, msg:
@@ -81,7 +86,6 @@ class phpUtilities:
             thread.start_new_thread(phpUtilities.installPHPExtension, (extension, extension))
         except BaseException, msg:
             logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [initiateInstall]")
-
 
     @staticmethod
     def initiateRemoval(extension):
@@ -102,6 +106,8 @@ class phpUtilities:
 
                 completeName = str(initial) + '.' + str(final)
                 path = "/usr/local/lsws/ls" + phpVers + "/etc/php/" + completeName + "/litespeed/php.ini"
+
+            logging.CyberCPLogFileWriter.writeToFile(path)
 
             data = open(path, 'r').readlines()
 
@@ -178,6 +184,7 @@ def main():
     parser.add_argument("--upload_max_filesize", help="Process Soft Limit for PHP!")
     parser.add_argument("--max_input_time", help="Process Hard Limit for PHP!")
     parser.add_argument("--post_max_size", help="Process Hard Limit for PHP!")
+    parser.add_argument("--extension", help="Process Hard Limit for PHP!")
 
     ## Litespeed Tuning Arguments
 
@@ -191,6 +198,12 @@ def main():
                                         args.max_execution_time, args.upload_max_filesize, args.max_input_time, args.post_max_size)
     elif args.function == "savePHPConfigAdvance":
         phpUtilities.savePHPConfigAdvance(args.phpVers, args.tempPath)
+
+    elif args.function == "installPHPExtension":
+        phpUtilities.installPHPExtension(args.extension, args.extension)
+
+    elif args.function == "unInstallPHPExtension":
+        phpUtilities.unInstallPHPExtension(args.extension, args.extension)
 
 
 

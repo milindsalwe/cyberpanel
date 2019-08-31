@@ -110,4 +110,16 @@
          <status>1</status>
      </extension>
 
+     <extension>
+         <extensionName>lsphp72-ioncube</extensionName>
+         <extensionDescription>ioncube loaders</extensionDescription>
+         <status>0</status>
+     </extension>
+
+    <extension>
+         <extensionName>lsphp72-pecl-imagick</extensionName>
+         <extensionDescription>Extension to create and modify images using ImageMagick</extensionDescription>
+         <status>0</status>
+     </extension>
+
 </php>

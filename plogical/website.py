@@ -3,6 +3,7 @@ import os
 import os.path
 import sys
 import django
+
 sys.path.append('/usr/local/CyberCP')
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "CyberCP.settings")
 django.setup()
@@ -33,13 +34,22 @@ from plogical import hashPassword
 from emailMarketing.emACL import emACL
 from processUtilities import ProcessUtilities
 from managePHP.phpManager import PHPManager
+from ApachController.ApacheVhosts import ApacheVhost
+from plogical.vhostConfs import vhostConfs
+from plogical.cronUtil import CronUtil
+from re import match,I,M
+
 
 class WebsiteManager:
-    def __init__(self, domain = None, childDomain = None):
+    apache = 1
+    ols = 2
+    lsws = 3
+
+    def __init__(self, domain=None, childDomain=None):
         self.domain = domain
         self.childDomain = childDomain
 
-    def createWebsite(self, request = None, userID = None, data = None):
+    def createWebsite(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             if ACLManager.currentContextPermission(currentACL, 'createWebsite') == 0:
@@ -55,7 +65,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def modifyWebsite(self, request = None, userID = None, data = None):
+    def modifyWebsite(self, request=None, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -70,7 +80,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def deleteWebsite(self, request = None, userID = None, data = None):
+    def deleteWebsite(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             if ACLManager.currentContextPermission(currentACL, 'deleteWebsite') == 0:
@@ -78,12 +88,11 @@ class WebsiteManager:
 
             websitesName = ACLManager.findAllSites(currentACL, userID)
 
-
             return render(request, 'websiteFunctions/deleteWebsite.html', {'websiteList': websitesName})
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def siteState(self, request = None, userID = None, data = None):
+    def siteState(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
 
@@ -96,7 +105,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def listWebsites(self, request = None, userID = None, data = None):
+    def listWebsites(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             pagination = self.websitePagination(currentACL, userID)
@@ -105,7 +114,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def listCron(self, request = None, userID = None, data = None):
+    def listCron(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             websitesName = ACLManager.findAllSites(currentACL, userID)
@@ -113,7 +122,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def domainAlias(self, request = None, userID = None, data = None):
+    def domainAlias(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -137,7 +146,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def submitWebsiteCreation(self, userID = None, data = None):
+    def submitWebsiteCreation(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -149,27 +158,56 @@ class WebsiteManager:
             phpSelection = data['phpSelection']
             packageName = data['package']
             websiteOwner = data['websiteOwner']
+
+            if not match(r'([\da-z\.-]+\.[a-z\.]{2,12}|[\d\.]+)([\/:?=&#]{1}[\da-z\.-]+)*[\/\?]?', domain,
+                  M | I):
+                data_ret = {'status': 0, 'createWebSiteStatus': 0, 'error_message': "Invalid domain."}
+                json_data = json.dumps(data_ret)
+                return HttpResponse(json_data)
+
+            if not match(r'\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b', adminEmail,
+                  M | I):
+                data_ret = {'status': 0, 'createWebSiteStatus': 0, 'error_message': "Invalid email."}
+                json_data = json.dumps(data_ret)
+                return HttpResponse(json_data)
+
+
             try:
                 HA = data['HA']
                 externalApp = 'nobody'
             except:
                 externalApp = "".join(re.findall("[a-zA-Z]+", domain))[:7]
 
+            try:
+                counter = 0
+                while 1:
+                    tWeb = Websites.objects.get(externalApp=externalApp)
+                    externalApp = '%s%s' % (tWeb.externalApp, str(counter))
+                    counter = counter + 1
+            except:
+                pass
+
             tempStatusPath = "/home/cyberpanel/" + str(randint(1000, 9999))
+
+            try:
+                apacheBackend = str(data['apacheBackend'])
+            except:
+                apacheBackend = "0"
 
             ## Create Configurations
 
-            execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
+            execPath = "sudo /usr/local/CyberCP/bin/python2 " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
             execPath = execPath + " createVirtualHost --virtualHostName " + domain + \
                        " --administratorEmail " + adminEmail + " --phpVersion '" + phpSelection + \
                        "' --virtualHostUser " + externalApp + " --ssl " + str(data['ssl']) + " --dkimCheck " \
                        + str(data['dkimCheck']) + " --openBasedir " + str(data['openBasedir']) + \
-                       ' --websiteOwner ' + websiteOwner + ' --package ' + packageName + ' --tempStatusPath ' + tempStatusPath
+                       ' --websiteOwner ' + websiteOwner + ' --package ' + packageName + ' --tempStatusPath ' + tempStatusPath + " --apache " + apacheBackend
 
-            subprocess.Popen(shlex.split(execPath))
+            ProcessUtilities.popenExecutioner(execPath)
             time.sleep(2)
 
-            data_ret = {'status': 1, 'createWebSiteStatus': 1, 'error_message': "None", 'tempStatusPath': tempStatusPath}
+            data_ret = {'status': 1, 'createWebSiteStatus': 1, 'error_message': "None",
+                        'tempStatusPath': tempStatusPath}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
@@ -179,7 +217,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def submitDomainCreation(self, userID = None, data = None):
+    def submitDomainCreation(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -191,6 +229,12 @@ class WebsiteManager:
             path = data['path']
             tempStatusPath = "/home/cyberpanel/" + str(randint(1000, 9999))
 
+            if not match(r'([\da-z\.-]+\.[a-z\.]{2,12}|[\d\.]+)([\/:?=&#]{1}[\da-z\.-]+)*[\/\?]?', domain,
+                  M | I):
+                data_ret = {'status': 0, 'createWebSiteStatus': 0, 'error_message': "Invalid domain."}
+                json_data = json.dumps(data_ret)
+                return HttpResponse(json_data)
+
             if ACLManager.checkOwnership(masterDomain, admin, currentACL) == 1:
                 pass
             else:
@@ -199,12 +243,16 @@ class WebsiteManager:
             if currentACL['admin'] != 1:
                 data['openBasedir'] = 1
 
-
             if len(path) > 0:
                 path = path.lstrip("/")
                 path = "/home/" + masterDomain + "/public_html/" + path
             else:
                 path = "/home/" + masterDomain + "/public_html/" + domain
+
+            try:
+                apacheBackend = str(data['apacheBackend'])
+            except:
+                apacheBackend = "0"
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
 
@@ -212,21 +260,22 @@ class WebsiteManager:
                        " --phpVersion '" + phpSelection + "' --ssl " + str(data['ssl']) + " --dkimCheck " + str(
                 data['dkimCheck']) \
                        + " --openBasedir " + str(data['openBasedir']) + ' --path ' + path + ' --websiteOwner ' \
-                       + admin.userName + ' --tempStatusPath ' + tempStatusPath
+                       + admin.userName + ' --tempStatusPath ' + tempStatusPath + " --apache " + apacheBackend
 
-            subprocess.Popen(shlex.split(execPath))
+            ProcessUtilities.popenExecutioner(execPath)
             time.sleep(2)
 
-            data_ret = {'status': 1, 'createWebSiteStatus': 1, 'error_message': "None", 'tempStatusPath': tempStatusPath}
+            data_ret = {'status': 1, 'createWebSiteStatus': 1, 'error_message': "None",
+                        'tempStatusPath': tempStatusPath}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
         except BaseException, msg:
-            data_ret = {'status': 0,'createWebSiteStatus': 0, 'error_message': str(msg)}
+            data_ret = {'status': 0, 'createWebSiteStatus': 0, 'error_message': str(msg)}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def fetchDomains(self, userID = None, data = None):
+    def fetchDomains(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -249,13 +298,19 @@ class WebsiteManager:
             final_json = json.dumps(final_dic)
             return HttpResponse(final_json)
 
-    def getFurtherAccounts(self, userID = None, data = None):
+    def searchWebsites(self, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
-            pageNumber = int(data['page'])
-            json_data = self.findWebsitesJson(currentACL, userID, pageNumber)
+            try:
+                json_data = self.searchWebsitesJson(currentACL, userID, data['patternAdded'])
+            except BaseException, msg:
+                tempData = {}
+                tempData['page'] = 1
+                return self.getFurtherAccounts(userID, tempData)
+
             pagination = self.websitePagination(currentACL, userID)
-            final_dic = {'status': 1, 'listWebSiteStatus': 1, 'error_message': "None", "data": json_data, 'pagination': pagination}
+            final_dic = {'status': 1, 'listWebSiteStatus': 1, 'error_message': "None", "data": json_data,
+                         'pagination': pagination}
             final_json = json.dumps(final_dic)
             return HttpResponse(final_json)
         except BaseException, msg:
@@ -263,7 +318,22 @@ class WebsiteManager:
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
 
-    def submitWebsiteDeletion(self, userID = None, data = None):
+    def getFurtherAccounts(self, userID=None, data=None):
+        try:
+            currentACL = ACLManager.loadedACL(userID)
+            pageNumber = int(data['page'])
+            json_data = self.findWebsitesJson(currentACL, userID, pageNumber)
+            pagination = self.websitePagination(currentACL, userID)
+            final_dic = {'status': 1, 'listWebSiteStatus': 1, 'error_message': "None", "data": json_data,
+                         'pagination': pagination}
+            final_json = json.dumps(final_dic)
+            return HttpResponse(final_json)
+        except BaseException, msg:
+            dic = {'status': 1, 'listWebSiteStatus': 0, 'error_message': str(msg)}
+            json_data = json.dumps(dic)
+            return HttpResponse(json_data)
+
+    def submitWebsiteDeletion(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -272,11 +342,17 @@ class WebsiteManager:
 
             websiteName = data['websiteName']
 
+            admin = Administrator.objects.get(pk=userID)
+            if ACLManager.checkOwnership(websiteName, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson('websiteDeleteStatus', 0)
+
             ## Deleting master domain
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
             execPath = execPath + " deleteVirtualHostConfigurations --virtualHostName " + websiteName
-            subprocess.check_output(shlex.split(execPath))
+            ProcessUtilities.popenExecutioner(execPath)
 
             data_ret = {'status': 1, 'websiteDeleteStatus': 1, 'error_message': "None"}
             json_data = json.dumps(data_ret)
@@ -287,7 +363,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def submitDomainDeletion(self, userID = None, data = None):
+    def submitDomainDeletion(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -301,7 +377,7 @@ class WebsiteManager:
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
             execPath = execPath + " deleteDomain --virtualHostName " + websiteName
-            subprocess.check_output(shlex.split(execPath))
+            ProcessUtilities.outputExecutioner(execPath)
 
             data_ret = {'status': 1, 'websiteDeleteStatus': 1, 'error_message': "None"}
             json_data = json.dumps(data_ret)
@@ -312,7 +388,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def submitWebsiteStatus(self, userID = None, data = None):
+    def submitWebsiteStatus(self, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             if ACLManager.currentContextPermission(currentACL, 'suspendWebsite') == 0:
@@ -326,20 +402,19 @@ class WebsiteManager:
             if state == "Suspend":
                 confPath = virtualHostUtilities.Server_root + "/conf/vhosts/" + websiteName
                 command = "sudo mv " + confPath + " " + confPath + "-suspended"
-                subprocess.call(shlex.split(command))
-                installUtilities.reStartLiteSpeed()
+                ProcessUtilities.popenExecutioner(command)
+                installUtilities.reStartLiteSpeedSocket()
                 website.state = 0
             else:
                 confPath = virtualHostUtilities.Server_root + "/conf/vhosts/" + websiteName
 
                 command = "sudo mv " + confPath + "-suspended" + " " + confPath
-                subprocess.call(shlex.split(command))
+                ProcessUtilities.executioner(command)
 
                 command = "chown -R " + "lsadm" + ":" + "lsadm" + " " + confPath
-                cmd = shlex.split(command)
-                subprocess.call(cmd)
+                ProcessUtilities.popenExecutioner(command)
 
-                installUtilities.reStartLiteSpeed()
+                installUtilities.reStartLiteSpeedSocket()
                 website.state = 1
 
             website.save()
@@ -354,12 +429,18 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def submitWebsiteModify(self, userID = None, data = None):
+    def submitWebsiteModify(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
             if ACLManager.currentContextPermission(currentACL, 'modifyWebsite') == 0:
                 return ACLManager.loadErrorJson('modifyStatus', 0)
+
+            admin = Administrator.objects.get(pk=userID)
+            if ACLManager.checkOwnership(data['websiteToBeModified'], admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson('websiteDeleteStatus', 0)
 
             packs = ACLManager.loadPackages(userID, currentACL)
             admins = ACLManager.loadAllUsers(userID)
@@ -415,7 +496,7 @@ class WebsiteManager:
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
 
-    def fetchWebsiteDataJSON(self, userID = None, data = None):
+    def fetchWebsiteDataJSON(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -467,7 +548,7 @@ class WebsiteManager:
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
 
-    def saveWebsiteChanges(self, userID = None, data = None):
+    def saveWebsiteChanges(self, userID=None, data=None):
         try:
             domain = data['domain']
             package = data['packForWeb']
@@ -479,23 +560,20 @@ class WebsiteManager:
             if ACLManager.currentContextPermission(currentACL, 'modifyWebsite') == 0:
                 return ACLManager.loadErrorJson('saveStatus', 0)
 
+            admin = Administrator.objects.get(pk=userID)
+            if ACLManager.checkOwnership(domain, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson('websiteDeleteStatus', 0)
+
             confPath = virtualHostUtilities.Server_root + "/conf/vhosts/" + domain
             completePathToConfigFile = confPath + "/vhost.conf"
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
             execPath = execPath + " changePHP --phpVersion '" + phpVersion + "' --path " + completePathToConfigFile
+            ProcessUtilities.popenExecutioner(execPath)
 
-            output = subprocess.check_output(shlex.split(execPath))
-
-            if output.find("1,None") > -1:
-                pass
-            else:
-                data_ret = {'status': 0, 'saveStatus': 0, 'error_message': output}
-                json_data = json.dumps(data_ret)
-                return HttpResponse(json_data)
-
-                ## php changes ends
+            ####
 
             newOwner = Administrator.objects.get(userName=newUser)
 
@@ -518,14 +596,13 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def loadDomainHome(self, request = None, userID = None, data = None):
+    def loadDomainHome(self, request=None, userID=None, data=None):
 
         if Websites.objects.filter(domain=self.domain).exists():
 
             currentACL = ACLManager.loadedACL(userID)
             website = Websites.objects.get(domain=self.domain)
             admin = Administrator.objects.get(pk=userID)
-
 
             if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
                 pass
@@ -554,7 +631,7 @@ class WebsiteManager:
                 execPath = execPath + " findDomainBW --virtualHostName " + self.domain + " --bandwidth " + str(
                     website.package.bandwidth)
 
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
                 bwData = output.split(",")
             except BaseException, msg:
                 logging.CyberCPLogFileWriter.writeToFile(str(msg))
@@ -580,13 +657,25 @@ class WebsiteManager:
 
             Data['phps'] = PHPManager.findPHPVersions()
 
+            servicePath = '/home/cyberpanel/postfix'
+            if os.path.exists(servicePath):
+                Data['email'] = 1
+            else:
+                Data['email'] = 0
+
+            servicePath = '/home/cyberpanel/pureftpd'
+            if os.path.exists(servicePath):
+                Data['ftp'] = 1
+            else:
+                Data['ftp'] = 0
+
             return render(request, 'websiteFunctions/website.html', Data)
 
         else:
             return render(request, 'websiteFunctions/website.html',
                           {"error": 1, "domain": "This domain does not exists."})
 
-    def launchChild(self, request = None, userID = None, data = None):
+    def launchChild(self, request=None, userID=None, data=None):
 
         if ChildDomains.objects.filter(domain=self.childDomain).exists():
             currentACL = ACLManager.loadedACL(userID)
@@ -619,7 +708,7 @@ class WebsiteManager:
                 execPath = execPath + " findDomainBW --virtualHostName " + self.domain + " --bandwidth " + str(
                     website.package.bandwidth)
 
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
                 bwData = output.split(",")
             except BaseException, msg:
                 logging.CyberCPLogFileWriter.writeToFile(str(msg))
@@ -645,11 +734,24 @@ class WebsiteManager:
 
             Data['phps'] = PHPManager.findPHPVersions()
 
+            servicePath = '/home/cyberpanel/postfix'
+            if os.path.exists(servicePath):
+                Data['email'] = 1
+            else:
+                Data['email'] = 0
+
+            servicePath = '/home/cyberpanel/pureftpd'
+            if os.path.exists(servicePath):
+                Data['ftp'] = 1
+            else:
+                Data['ftp'] = 0
+
             return render(request, 'websiteFunctions/launchChild.html', Data)
         else:
-            return render(request, 'websiteFunctions/launchChild.html', {"error":1,"domain": "This child domain does not exists"})
+            return render(request, 'websiteFunctions/launchChild.html',
+                          {"error": 1, "domain": "This child domain does not exists"})
 
-    def getDataFromLogFile(self, userID = None, data = None):
+    def getDataFromLogFile(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -663,27 +765,24 @@ class WebsiteManager:
         else:
             return ACLManager.loadErrorJson('logstatus', 0)
 
-
         if logType == 1:
             fileName = "/home/" + self.domain + "/logs/" + self.domain + ".access_log"
         else:
             fileName = "/home/" + self.domain + "/logs/" + self.domain + ".error_log"
 
         ## get Logs
+        website = Websites.objects.get(domain=self.domain)
 
         execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
         execPath = execPath + " getAccessLogs --path " + fileName + " --page " + str(page)
-
-        output = subprocess.check_output(shlex.split(execPath))
+        output = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
 
         if output.find("1,None") > -1:
             final_json = json.dumps(
-                {'status': 0,'logstatus': 0, 'error_message': "Not able to fetch logs, see CyberPanel main log file!"})
+                {'status': 0, 'logstatus': 0, 'error_message': "Not able to fetch logs, see CyberPanel main log file!"})
             return HttpResponse(final_json)
 
         ## get log ends here.
-
 
         data = output.split("\n")
 
@@ -716,7 +815,7 @@ class WebsiteManager:
         final_json = json.dumps({'status': 1, 'logstatus': 1, 'error_message': "None", "data": json_data})
         return HttpResponse(final_json)
 
-    def fetchErrorLogs(self, userID = None, data = None):
+    def fetchErrorLogs(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -732,12 +831,12 @@ class WebsiteManager:
         fileName = "/home/" + self.domain + "/logs/" + self.domain + ".error_log"
 
         ## get Logs
+        website = Websites.objects.get(domain=self.domain)
 
         execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
         execPath = execPath + " getErrorLogs --path " + fileName + " --page " + str(page)
 
-        output = subprocess.check_output(shlex.split(execPath))
+        output = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
 
         if output.find("1,None") > -1:
             final_json = json.dumps(
@@ -749,7 +848,7 @@ class WebsiteManager:
         final_json = json.dumps({'status': 1, 'logstatus': 1, 'error_message': "None", "data": output})
         return HttpResponse(final_json)
 
-    def getDataFromConfigFile(self, userID = None, data = None):
+    def getDataFromConfigFile(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -763,7 +862,7 @@ class WebsiteManager:
         filePath = installUtilities.Server_root_path + "/conf/vhosts/" + self.domain + "/vhost.conf"
 
         command = 'sudo cat ' + filePath
-        configData = subprocess.check_output(shlex.split(command))
+        configData = ProcessUtilities.outputExecutioner(command, 'lsadm')
 
         if len(configData) == 0:
             status = {'status': 0, "configstatus": 0, "error_message": "Configuration file is currently empty!"}
@@ -775,7 +874,7 @@ class WebsiteManager:
         final_json = json.dumps(status)
         return HttpResponse(final_json)
 
-    def saveConfigsToFile(self, userID = None, data = None):
+    def saveConfigsToFile(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
 
@@ -802,10 +901,9 @@ class WebsiteManager:
         ## save configuration data
 
         execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
         execPath = execPath + " saveVHostConfigs --path " + filePath + " --tempPath " + tempPath
 
-        output = subprocess.check_output(shlex.split(execPath))
+        output = ProcessUtilities.outputExecutioner(execPath)
 
         if output.find("1,None") > -1:
             status = {"configstatus": 1}
@@ -817,9 +915,9 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-        ## save configuration data ends
+            ## save configuration data ends
 
-    def getRewriteRules(self, userID = None, data = None):
+    def getRewriteRules(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -854,7 +952,7 @@ class WebsiteManager:
             final_json = json.dumps(status)
             return HttpResponse(final_json)
 
-    def saveRewriteRules(self, userID = None, data = None):
+    def saveRewriteRules(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -869,7 +967,7 @@ class WebsiteManager:
         ## writing data temporary to file
 
         mailUtilities.checkHome()
-        tempPath = "/home/cyberpanel/" + str(randint(1000, 9999))
+        tempPath = "/tmp/" + str(randint(1000, 9999))
         vhost = open(tempPath, "w")
         vhost.write(rewriteRules)
         vhost.close()
@@ -879,18 +977,21 @@ class WebsiteManager:
         try:
             childDomain = ChildDomains.objects.get(domain=self.domain)
             filePath = childDomain.path + '/.htaccess'
+            externalApp = childDomain.master.externalApp
         except:
             filePath = "/home/" + self.domain + "/public_html/.htaccess"
+            website = Websites.objects.get(domain=self.domain)
+            externalApp = website.externalApp
 
         ## save configuration data
 
         execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
         execPath = execPath + " saveRewriteRules --virtualHostName " + self.domain + " --path " + filePath + " --tempPath " + tempPath
 
-        output = subprocess.check_output(shlex.split(execPath))
+        output = ProcessUtilities.outputExecutioner(execPath, externalApp)
 
         if output.find("1,None") > -1:
+            installUtilities.reStartLiteSpeedSocket()
             status = {"rewriteStatus": 1, 'error_message': output}
             final_json = json.dumps(status)
             return HttpResponse(final_json)
@@ -899,7 +1000,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def saveSSL(self, userID = None, data = None):
+    def saveSSL(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -916,7 +1017,6 @@ class WebsiteManager:
 
         ## writing data temporary to file
 
-
         tempKeyPath = "/home/cyberpanel/" + str(randint(1000, 9999))
         vhost = open(tempKeyPath, "w")
         vhost.write(key)
@@ -930,10 +1030,8 @@ class WebsiteManager:
         ## writing data temporary to file
 
         execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
         execPath = execPath + " saveSSL --virtualHostName " + self.domain + " --tempKeyPath " + tempKeyPath + " --tempCertPath " + tempCertPath
-
-        output = subprocess.check_output(shlex.split(execPath))
+        output = ProcessUtilities.outputExecutioner(execPath)
 
         if output.find("1,None") > -1:
             data_ret = {'sslStatus': 1, 'error_message': "None"}
@@ -946,7 +1044,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def changePHP(self, userID = None, data = None):
+    def changePHP(self, userID=None, data=None):
 
         currentACL = ACLManager.loadedACL(userID)
         admin = Administrator.objects.get(pk=userID)
@@ -958,22 +1056,12 @@ class WebsiteManager:
         else:
             return ACLManager.loadErrorJson('changePHP', 0)
 
-
         confPath = virtualHostUtilities.Server_root + "/conf/vhosts/" + self.domain
         completePathToConfigFile = confPath + "/vhost.conf"
 
         execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
         execPath = execPath + " changePHP --phpVersion '" + phpVersion + "' --path " + completePathToConfigFile
-
-        output = subprocess.check_output(shlex.split(execPath))
-
-        if output.find("1,None") > -1:
-            pass
-        else:
-            data_ret = {'status': 1, 'changePHP': 0, 'error_message': output}
-            json_data = json.dumps(data_ret)
-            return HttpResponse(json_data)
+        ProcessUtilities.popenExecutioner(execPath)
 
         data_ret = {'status': 1, 'changePHP': 1, 'error_message': "None"}
         json_data = json.dumps(data_ret)
@@ -1000,28 +1088,22 @@ class WebsiteManager:
                 json_data = json.dumps(dic)
                 return HttpResponse(json_data)
 
-            if ProcessUtilities.decideDistro() == ProcessUtilities.centos:
-                cronPath = "/var/spool/cron/" + website.externalApp
-            else:
-                cronPath = "/var/spool/cron/crontabs/" + website.externalApp
-
-            cmd = 'sudo test -e ' + cronPath + ' && echo Exists'
-            output = os.popen(cmd).read()
-
-            if "Exists" not in output:
-                data_ret = {'getWebsiteCron': 1, "user": website.externalApp, "crons": {}}
-                final_json = json.dumps(data_ret)
-                return HttpResponse(final_json)
+            CronUtil.CronPrem(1)
 
             crons = []
 
-            try:
-                # f = subprocess.check_output(["sudo", "cat", cronPath])
-                f = subprocess.check_output(["sudo", "crontab", "-u", website.externalApp, "-l"])
-            except subprocess.CalledProcessError as error:
-                dic = {'getWebsiteCron': 0, 'error_message': 'Unable to access Cron file'}
-                json_data = json.dumps(dic)
-                return HttpResponse(json_data)
+            execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/cronUtil.py"
+            execPath = execPath + " getWebsiteCron --externalApp " + website.externalApp
+
+            f = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
+
+            CronUtil.CronPrem(0)
+
+            if f.find("0,CyberPanel,") > -1:
+                data_ret = {'getWebsiteCron': 0, "user": website.externalApp, "crons": {}}
+                final_json = json.dumps(data_ret)
+                return HttpResponse(final_json)
+
             counter = 0
             for line in f.split("\n"):
                 if line:
@@ -1040,7 +1122,7 @@ class WebsiteManager:
             final_json = json.dumps(data_ret)
             return HttpResponse(final_json)
         except BaseException, msg:
-            print msg
+            logging.CyberCPLogFileWriter.writeToFile(str(msg))
             dic = {'getWebsiteCron': 0, 'error_message': str(msg)}
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
@@ -1069,13 +1151,13 @@ class WebsiteManager:
             line -= 1
             website = Websites.objects.get(domain=self.domain)
 
-            cronPath = "/var/spool/cron/" + website.externalApp
-            crons = []
-
             try:
-                # f = subprocess.check_output(["sudo", "cat", cronPath])
-                f = subprocess.check_output(["sudo", "/usr/bin/crontab", "-u", website.externalApp, "-l"])
-                print f
+                CronUtil.CronPrem(1)
+                execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/cronUtil.py"
+                execPath = execPath + " getWebsiteCron --externalApp " + website.externalApp
+
+                f = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
+                CronUtil.CronPrem(0)
             except subprocess.CalledProcessError as error:
                 dic = {'getWebsiteCron': 0, 'error_message': 'Unable to access Cron file'}
                 json_data = json.dumps(dic)
@@ -1083,11 +1165,6 @@ class WebsiteManager:
 
             f = f.split("\n")
             cron = f[line]
-
-            if not cron:
-                dic = {'getWebsiteCron': 0, 'error_message': 'Cron line empty'}
-                json_data = json.dumps(dic)
-                return HttpResponse(json_data)
 
             cron = cron.split(" ", 5)
             if len(cron) != 6:
@@ -1128,7 +1205,7 @@ class WebsiteManager:
             monthday = data['monthday']
             month = data['month']
             weekday = data['weekday']
-            command = data['command']
+            command = data['cronCommand']
 
             if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
                 pass
@@ -1137,51 +1214,29 @@ class WebsiteManager:
 
             website = Websites.objects.get(domain=self.domain)
 
-            tempPath = "/home/cyberpanel/" + website.externalApp + str(randint(10000, 99999)) + ".cron.tmp"
-
             finalCron = "%s %s %s %s %s %s" % (minute, hour, monthday, month, weekday, command)
 
-            output = subprocess.check_output(["sudo", "/usr/bin/crontab", "-u", website.externalApp, "-l"])
+            CronUtil.CronPrem(1)
 
-            if "no crontab for" in output:
-                data_ret = {'addNewCron': 0, 'error_message': 'crontab file does not exists for user'}
+            execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/cronUtil.py"
+            execPath = execPath + " saveCronChanges --externalApp " + website.externalApp + " --line " + str(
+                line) + " --finalCron '" + finalCron + "'"
+            output = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
+            CronUtil.CronPrem(0)
+
+            if output.find("1,") > -1:
+                data_ret = {"getWebsiteCron": 1,
+                            "user": website.externalApp,
+                            "cron": finalCron,
+                            "line": line}
                 final_json = json.dumps(data_ret)
                 return HttpResponse(final_json)
+            else:
+                dic = {'getWebsiteCron': 0, 'error_message': output}
+                json_data = json.dumps(dic)
+                return HttpResponse(json_data)
 
-            with open(tempPath, "w+") as file:
-                file.write(output)
-
-            # Confirming that directory is read/writable
-            o = subprocess.call(['sudo', 'chown', 'cyberpanel:cyberpanel', tempPath])
-            if o is not 0:
-                data_ret = {'addNewCron': 0, 'error_message': 'Error Changing Permissions'}
-                final_json = json.dumps(data_ret)
-                return HttpResponse(final_json)
-
-            with open(tempPath, 'r') as file:
-                data = file.readlines()
-
-            data[line] = finalCron + '\n'
-
-            with open(tempPath, 'w') as file:
-                file.writelines(data)
-
-            output = subprocess.call(["sudo", "/usr/bin/crontab", "-u", website.externalApp, tempPath])
-
-            os.remove(tempPath)
-            if output != 0:
-                data_ret = {'addNewCron': 0, 'error_message': 'Incorrect Syntax cannot be accepted.'}
-                final_json = json.dumps(data_ret)
-                return HttpResponse(final_json)
-
-            data_ret = {"getWebsiteCron": 1,
-                        "user": website.externalApp,
-                        "cron": finalCron,
-                        "line": line}
-            final_json = json.dumps(data_ret)
-            return HttpResponse(final_json)
         except BaseException, msg:
-            print msg
             dic = {'getWebsiteCron': 0, 'error_message': str(msg)}
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
@@ -1199,52 +1254,31 @@ class WebsiteManager:
             else:
                 return ACLManager.loadErrorJson('addNewCron', 0)
 
-            line -= 1
             website = Websites.objects.get(domain=self.domain)
 
-            output = subprocess.check_output(["sudo", "/usr/bin/crontab", "-u", website.externalApp, "-l"])
+            CronUtil.CronPrem(1)
 
-            if "no crontab for" in output:
-                data_ret = {'addNewCron': 0, 'error_message': 'No Cron exists for this user'}
+            execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/cronUtil.py"
+            execPath = execPath + " remCronbyLine --externalApp " + website.externalApp + " --line " + str(
+                line)
+            output = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
+
+            CronUtil.CronPrem(0)
+
+            if output.find("1,") > -1:
+                data_ret = {"remCronbyLine": 1,
+                            "user": website.externalApp,
+                            "removeLine": output.split(',')[1],
+                            "line": line}
                 final_json = json.dumps(data_ret)
                 return HttpResponse(final_json)
+            else:
+                dic = {'remCronbyLine': 0, 'error_message': output}
+                json_data = json.dumps(dic)
+                return HttpResponse(json_data)
 
-            tempPath = "/home/cyberpanel/" + website.externalApp + str(randint(10000, 99999)) + ".cron.tmp"
 
-            with open(tempPath, "w+") as file:
-                file.write(output)
-
-            # Confirming that directory is read/writable
-            o = subprocess.call(['sudo', 'chown', 'cyberpanel:cyberpanel', tempPath])
-            if o is not 0:
-                data_ret = {'addNewCron': 0, 'error_message': 'Error Changing Permissions'}
-                final_json = json.dumps(data_ret)
-                return HttpResponse(final_json)
-
-            with open(tempPath, 'r') as file:
-                data = file.readlines()
-
-            removedLine = data.pop(line)
-
-            with open(tempPath, 'w') as file:
-                file.writelines(data)
-
-            output = subprocess.call(["sudo", "/usr/bin/crontab", "-u", website.externalApp, tempPath])
-
-            os.remove(tempPath)
-            if output != 0:
-                data_ret = {'addNewCron': 0, 'error_message': 'Incorrect Syntax cannot be accepted'}
-                final_json = json.dumps(data_ret)
-                return HttpResponse(final_json)
-
-            data_ret = {"remCronbyLine": 1,
-                        "user": website.externalApp,
-                        "removeLine": removedLine,
-                        "line": line}
-            final_json = json.dumps(data_ret)
-            return HttpResponse(final_json)
         except BaseException, msg:
-            print msg
             dic = {'remCronbyLine': 0, 'error_message': str(msg)}
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
@@ -1261,7 +1295,7 @@ class WebsiteManager:
             monthday = data['monthday']
             month = data['month']
             weekday = data['weekday']
-            command = data['command']
+            command = data['cronCommand']
 
             if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
                 pass
@@ -1270,56 +1304,42 @@ class WebsiteManager:
 
             website = Websites.objects.get(domain=self.domain)
 
-            try:
-                output = subprocess.check_output(["sudo", "/usr/bin/crontab", "-u", website.externalApp, "-l"])
-            except:
-                try:
-                    subprocess.call(('sudo', 'crontab', '-u', website.externalApp, '-'))
-                except:
-                    data_ret = {'addNewCron': 0, 'error_message': 'Unable to initialise crontab file for user'}
-                    final_json = json.dumps(data_ret)
-                    return HttpResponse(final_json)
+            CronPath = '/var/spool/cron/%s' % (website.externalApp)
 
-            output = subprocess.check_output(["sudo", "/usr/bin/crontab", "-u", website.externalApp, "-l"])
+            commandT = 'touch %s' % (CronPath)
+            ProcessUtilities.executioner(commandT, 'root')
+            commandT = 'chown %s:%s %s' % (website.externalApp, website.externalApp, CronPath)
+            ProcessUtilities.executioner(commandT, 'root')
 
-            if "no crontab for" in output:
-                echo = subprocess.Popen((['cat', '/dev/null']), stdout=subprocess.PIPE)
-                subprocess.call(('sudo', 'crontab', '-u', website.externalApp, '-'), stdin=echo.stdout)
-                echo.wait()
-                echo.stdout.close()
-                output = subprocess.check_output(["sudo", "/usr/bin/crontab", "-u", website.externalApp, "-l"])
-                if "no crontab for" in output:
-                    data_ret = {'addNewCron': 0, 'error_message': 'Unable to initialise crontab file for user'}
-                    final_json = json.dumps(data_ret)
-                    return HttpResponse(final_json)
-
-            tempPath = "/home/cyberpanel/" + website.externalApp + str(randint(10000, 99999)) + ".cron.tmp"
+            CronUtil.CronPrem(1)
 
             finalCron = "%s %s %s %s %s %s" % (minute, hour, monthday, month, weekday, command)
 
-            with open(tempPath, "a") as file:
-                file.write(output + finalCron + "\n")
+            execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/cronUtil.py"
+            execPath = execPath + " addNewCron --externalApp " + website.externalApp + " --finalCron '" + finalCron + "'"
+            output = ProcessUtilities.outputExecutioner(execPath, website.externalApp)
 
-            output = subprocess.call(["sudo", "/usr/bin/crontab", "-u", website.externalApp, tempPath])
+            CronUtil.CronPrem(0)
 
-            os.remove(tempPath)
-            if output != 0:
-                data_ret = {'addNewCron': 0, 'error_message': 'Incorrect Syntax cannot be accepted'}
+            if output.find("1,") > -1:
+
+                data_ret = {"addNewCron": 1,
+                            "user": website.externalApp,
+                            "cron": finalCron}
                 final_json = json.dumps(data_ret)
                 return HttpResponse(final_json)
+            else:
+                dic = {'addNewCron': 0, 'error_message': output}
+                json_data = json.dumps(dic)
+                return HttpResponse(json_data)
 
-            data_ret = {"addNewCron": 1,
-                        "user": website.externalApp,
-                        "cron": finalCron}
-            final_json = json.dumps(data_ret)
-            return HttpResponse(final_json)
+
         except BaseException, msg:
-            print msg
             dic = {'addNewCron': 0, 'error_message': str(msg)}
             json_data = json.dumps(dic)
             return HttpResponse(json_data)
 
-    def submitAliasCreation(self, userID = None, data = None):
+    def submitAliasCreation(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1328,6 +1348,12 @@ class WebsiteManager:
             self.domain = data['masterDomain']
             aliasDomain = data['aliasDomain']
             ssl = data['ssl']
+
+            if not match(r'([\da-z\.-]+\.[a-z\.]{2,12}|[\d\.]+)([\/:?=&#]{1}[\da-z\.-]+)*[\/\?]?', aliasDomain,
+                  M | I):
+                data_ret = {'status': 0, 'createAliasStatus': 0, 'error_message': "Invalid domain."}
+                json_data = json.dumps(data_ret)
+                return HttpResponse(json_data)
 
             if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
                 pass
@@ -1343,7 +1369,7 @@ class WebsiteManager:
             execPath = execPath + " createAlias --masterDomain " + self.domain + " --aliasDomain " + aliasDomain + " --ssl " + str(
                 ssl) + " --sslPath " + sslpath + " --administratorEmail " + admin.email + ' --websiteOwner ' + admin.userName
 
-            output = subprocess.check_output(shlex.split(execPath))
+            output = ProcessUtilities.outputExecutioner(execPath)
 
             if output.find("1,None") > -1:
                 pass
@@ -1365,7 +1391,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def issueAliasSSL(self, userID = None, data = None):
+    def issueAliasSSL(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1379,16 +1405,14 @@ class WebsiteManager:
             else:
                 return ACLManager.loadErrorJson('sslStatus', 0)
 
-
             sslpath = "/home/" + self.domain + "/public_html"
 
             ## Create Configurations
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
             execPath = execPath + " issueAliasSSL --masterDomain " + self.domain + " --aliasDomain " + aliasDomain + " --sslPath " + sslpath + " --administratorEmail " + admin.email
 
-            output = subprocess.check_output(shlex.split(execPath))
+            output = ProcessUtilities.outputExecutioner(execPath)
 
             if output.find("1,None") > -1:
                 data_ret = {'sslStatus': 1, 'error_message': "None", "existsStatus": 0}
@@ -1404,7 +1428,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def delateAlias(self, userID = None, data = None):
+    def delateAlias(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1421,10 +1445,8 @@ class WebsiteManager:
             ## Create Configurations
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
             execPath = execPath + " deleteAlias --masterDomain " + self.domain + " --aliasDomain " + aliasDomain
-
-            output = subprocess.check_output(shlex.split(execPath))
+            output = ProcessUtilities.outputExecutioner(execPath)
 
             if output.find("1,None") > -1:
                 data_ret = {'deleteAlias': 1, 'error_message': "None", "existsStatus": 0}
@@ -1441,7 +1463,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def changeOpenBasedir(self, userID = None, data = None):
+    def changeOpenBasedir(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1455,28 +1477,19 @@ class WebsiteManager:
                 return ACLManager.loadErrorJson('changeOpenBasedir', 0)
 
             execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
             execPath = execPath + " changeOpenBasedir --virtualHostName '" + self.domain + "' --openBasedirValue " + openBasedirValue
-
-            output = subprocess.check_output(shlex.split(execPath))
-
-            if output.find("1,None") > -1:
-                pass
-            else:
-                data_ret = {'status': 0, 'changeOpenBasedir': 0, 'error_message': output}
-                json_data = json.dumps(data_ret)
-                return HttpResponse(json_data)
+            output = ProcessUtilities.popenExecutioner(execPath)
 
             data_ret = {'status': 1, 'changeOpenBasedir': 1, 'error_message': "None"}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
         except BaseException, msg:
-            data_ret = {'status': 0,'changeOpenBasedir': 0, 'error_message': str(msg)}
+            data_ret = {'status': 0, 'changeOpenBasedir': 0, 'error_message': str(msg)}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def wordpressInstall(self, request = None, userID = None, data = None):
+    def wordpressInstall(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -1491,7 +1504,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def installWordpress(self, userID = None, data = None):
+    def installWordpress(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1504,7 +1517,6 @@ class WebsiteManager:
             else:
                 return ACLManager.loadErrorJson('installStatus', 0)
 
-
             mailUtilities.checkHome()
 
             extraArgs = {}
@@ -1513,7 +1525,7 @@ class WebsiteManager:
             extraArgs['home'] = data['home']
             extraArgs['blogTitle'] = data['blogTitle']
             extraArgs['adminUser'] = data['adminUser']
-            extraArgs['adminPassword'] = data['adminPassword']
+            extraArgs['adminPassword'] = data['passwordByPass']
             extraArgs['adminEmail'] = data['adminEmail']
             extraArgs['tempStatusPath'] = "/home/cyberpanel/" + str(randint(1000, 9999))
 
@@ -1536,11 +1548,11 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def installWordpressStatus(self, userID = None, data = None):
+    def installWordpressStatus(self, userID=None, data=None):
         try:
             statusFile = data['statusFile']
 
-            statusData = open(statusFile, 'r').readlines()
+            statusData = ProcessUtilities.outputExecutioner("sudo cat " + statusFile).splitlines()
 
             lastLine = statusData[-1]
 
@@ -1573,7 +1585,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def joomlaInstall(self, request = None, userID = None, data = None):
+    def joomlaInstall(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -1587,7 +1599,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def installJoomla(self, userID = None, data = None):
+    def installJoomla(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1605,16 +1617,17 @@ class WebsiteManager:
 
             sitename = data['sitename']
             username = data['username']
-            password = data['password']
+            password = data['passwordByPass']
             prefix = data['prefix']
 
             mailUtilities.checkHome()
 
-            tempStatusPath = "/home/cyberpanel/" + str(randint(1000, 9999))
+            tempStatusPath = "/tmp/" + str(randint(1000, 9999))
 
             statusFile = open(tempStatusPath, 'w')
             statusFile.writelines('Setting up paths,0')
             statusFile.close()
+            os.chmod(tempStatusPath, 0777)
 
             finalPath = ""
 
@@ -1648,8 +1661,6 @@ class WebsiteManager:
                 return HttpResponse(json_data)
 
             ##
-
-
 
             try:
                 website = ChildDomains.objects.get(domain=domainName)
@@ -1719,13 +1730,11 @@ class WebsiteManager:
 
             # return execPath
 
-
-            output = subprocess.Popen(shlex.split(execPath))
+            ProcessUtilities.popenExecutioner(execPath, externalApp)
 
             data_ret = {'status': 1, "installStatus": 1, 'tempStatusPath': tempStatusPath}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
-
 
             ## Installation ends
 
@@ -1734,16 +1743,17 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def setupGit(self, request = None, userID = None, data = None):
+    def setupGit(self, request=None, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
+            website = Websites.objects.get(domain=self.domain)
 
             if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
                 pass
             else:
-                return ACLManager.loadError()
+                return ACLManager.loadErrorJson()
 
             path = '/home/cyberpanel/' + self.domain + '.git'
 
@@ -1758,18 +1768,36 @@ class WebsiteManager:
                 return render(request, 'websiteFunctions/setupGit.html',
                               {'domainName': self.domain, 'installed': 1, 'webhookURL': webhookURL})
             else:
-                command = "sudo ssh-keygen -f /root/.ssh/" + self.domain + " -t rsa -N ''"
+
+                command = "ssh-keygen -f /home/%s/.ssh/%s -t rsa -N ''" % (self.domain, website.externalApp)
+                ProcessUtilities.executioner(command, website.externalApp)
+
+                ###
+
+                configContent = """Host github.com
+IdentityFile /home/%s/.ssh/%s
+""" % (self.domain, website.externalApp)
+
+                path = "/home/cyberpanel/config"
+                writeToFile = open(path, 'w')
+                writeToFile.writelines(configContent)
+                writeToFile.close()
+
+                command = 'mv %s /home/%s/.ssh/config' % (path, self.domain)
                 ProcessUtilities.executioner(command)
 
-                command = 'sudo cat /root/.ssh/' + self.domain + '.pub'
-                deploymentKey = subprocess.check_output(shlex.split(command)).strip('\n')
+                command = 'sudo chown %s:%s /home/%s/.ssh/config' % (website.externalApp, website.externalApp, self.domain)
+                ProcessUtilities.executioner(command)
+
+                command = 'cat /home/%s/.ssh/%s.pub' % (self.domain, website.externalApp)
+                deploymentKey = ProcessUtilities.outputExecutioner(command, website.externalApp)
 
             return render(request, 'websiteFunctions/setupGit.html',
                           {'domainName': self.domain, 'deploymentKey': deploymentKey, 'installed': 0})
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def setupGitRepo(self, userID = None, data = None):
+    def setupGitRepo(self, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -1808,7 +1836,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def gitNotify(self, userID = None, data = None):
+    def gitNotify(self, userID=None, data=None):
         try:
 
             extraArgs = {}
@@ -1826,7 +1854,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def detachRepo(self, userID = None, data = None):
+    def detachRepo(self, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -1859,7 +1887,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def changeBranch(self, userID = None, data = None):
+    def changeBranch(self, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -1893,7 +1921,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def installPrestaShop(self, request = None, userID = None, data = None):
+    def installPrestaShop(self, request=None, userID=None, data=None):
         try:
             currentACL = ACLManager.loadedACL(userID)
             admin = Administrator.objects.get(pk=userID)
@@ -1907,7 +1935,7 @@ class WebsiteManager:
         except BaseException, msg:
             return HttpResponse(str(msg))
 
-    def prestaShopInstall(self, userID = None, data = None):
+    def prestaShopInstall(self, userID=None, data=None):
         try:
 
             currentACL = ACLManager.loadedACL(userID)
@@ -1931,7 +1959,7 @@ class WebsiteManager:
             extraArgs['lastName'] = data['lastName']
             extraArgs['databasePrefix'] = data['databasePrefix']
             extraArgs['email'] = data['email']
-            extraArgs['password'] = data['password']
+            extraArgs['password'] = data['passwordByPass']
             extraArgs['tempStatusPath'] = "/home/cyberpanel/" + str(randint(1000, 9999))
 
             if data['home'] == '0':
@@ -1954,7 +1982,7 @@ class WebsiteManager:
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
 
-    def createWebsiteAPI(self, data = None):
+    def createWebsiteAPI(self, data=None):
         try:
 
             adminUser = data['adminUser']
@@ -1981,7 +2009,7 @@ class WebsiteManager:
                     websiteOwn = Administrator(userName=websiteOwner,
                                                password=hashPassword.hash_password(ownerPassword),
                                                email=adminEmail, type=3, owner=admin.pk,
-                                               initWebsitesLimit=1, acl=acl)
+                                               initWebsitesLimit=1, acl=acl, api=1)
                     websiteOwn.save()
                 except BaseException:
                     pass
@@ -1998,6 +2026,40 @@ class WebsiteManager:
             data_ret = {'createWebSiteStatus': 0, 'error_message': str(msg), "existsStatus": 0}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
+
+    def searchWebsitesJson(self, currentlACL, userID, searchTerm):
+
+        websites = ACLManager.searchWebsiteObjects(currentlACL, userID, searchTerm)
+
+        json_data = "["
+        checker = 0
+
+        try:
+            ipFile = "/etc/cyberpanel/machineIP"
+            f = open(ipFile)
+            ipData = f.read()
+            ipAddress = ipData.split('\n', 1)[0]
+        except BaseException, msg:
+            logging.CyberCPLogFileWriter.writeToFile("Failed to read machine IP, error:" + str(msg))
+            ipAddress = "192.168.100.1"
+
+        for items in websites:
+            if items.state == 0:
+                state = "Suspended"
+            else:
+                state = "Active"
+            dic = {'domain': items.domain, 'adminEmail': items.adminEmail, 'ipAddress': ipAddress,
+                   'admin': items.admin.userName, 'package': items.package.packageName, 'state': state}
+
+            if checker == 0:
+                json_data = json_data + json.dumps(dic)
+                checker = 1
+            else:
+                json_data = json_data + ',' + json.dumps(dic)
+
+        json_data = json_data + ']'
+
+        return json_data
 
     def findWebsitesJson(self, currentACL, userID, pageNumber):
         finalPageNumber = ((pageNumber * 10)) - 10
@@ -2051,3 +2113,213 @@ class WebsiteManager:
                 pagination.append('<li><a href="\#">' + str(i) + '</a></li>')
 
         return pagination
+
+    def getSwitchStatus(self, userID=None, data=None):
+        try:
+
+            currentACL = ACLManager.loadedACL(userID)
+            admin = Administrator.objects.get(pk=userID)
+
+            try:
+                globalData = data['global']
+
+                data = {}
+                data['status'] = 1
+
+                if os.path.exists('/etc/httpd'):
+                    data['server'] = 1
+                else:
+                    data['server'] = 0
+
+                json_data = json.dumps(data)
+                return HttpResponse(json_data)
+            except:
+                pass
+
+            self.domain = data['domainName']
+
+            if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson('status', 0)
+
+            if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
+                finalConfPath = ApacheVhost.configBasePath + self.domain + '.conf'
+
+                if os.path.exists(finalConfPath):
+
+                    phpPath = ApacheVhost.whichPHPExists(self.domain)
+                    command = 'sudo cat ' + phpPath
+                    phpConf = ProcessUtilities.outputExecutioner(command).splitlines()
+                    pmMaxChildren = phpConf[8].split(' ')[2]
+                    pmStartServers = phpConf[9].split(' ')[2]
+                    pmMinSpareServers = phpConf[10].split(' ')[2]
+                    pmMaxSpareServers = phpConf[11].split(' ')[2]
+
+                    data = {}
+                    data['status'] = 1
+
+                    data['server'] = WebsiteManager.apache
+                    data['pmMaxChildren'] = pmMaxChildren
+                    data['pmStartServers'] = pmStartServers
+                    data['pmMinSpareServers'] = pmMinSpareServers
+                    data['pmMaxSpareServers'] = pmMaxSpareServers
+                    data['phpPath'] = phpPath
+                else:
+                    data = {}
+                    data['status'] = 1
+                    data['server'] = WebsiteManager.ols
+
+            else:
+                data = {}
+                data['status'] = 1
+                data['server'] = WebsiteManager.lsws
+
+            json_data = json.dumps(data)
+            return HttpResponse(json_data)
+
+        except BaseException, msg:
+            data_ret = {'status': 0, 'saveStatus': 0, 'error_message': str(msg)}
+            json_data = json.dumps(data_ret)
+            return HttpResponse(json_data)
+
+    def switchServer(self, userID=None, data=None):
+
+        currentACL = ACLManager.loadedACL(userID)
+        admin = Administrator.objects.get(pk=userID)
+        domainName = data['domainName']
+        phpVersion = data['phpSelection']
+        server = data['server']
+
+        if ACLManager.checkOwnership(domainName, admin, currentACL) == 1:
+            pass
+        else:
+            return ACLManager.loadErrorJson()
+
+        tempStatusPath = "/home/cyberpanel/" + str(randint(1000, 9999))
+
+        execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
+        execPath = execPath + " switchServer --phpVersion '" + phpVersion + "' --server " + str(
+            server) + " --virtualHostName " + domainName + " --tempStatusPath " + tempStatusPath
+        ProcessUtilities.popenExecutioner(execPath)
+
+        time.sleep(3)
+
+        data_ret = {'status': 1, 'tempStatusPath': tempStatusPath}
+        json_data = json.dumps(data_ret)
+        return HttpResponse(json_data)
+
+    def tuneSettings(self, userID=None, data=None):
+
+        currentACL = ACLManager.loadedACL(userID)
+        admin = Administrator.objects.get(pk=userID)
+        domainName = data['domainName']
+        pmMaxChildren = data['pmMaxChildren']
+        pmStartServers = data['pmStartServers']
+        pmMinSpareServers = data['pmMinSpareServers']
+        pmMaxSpareServers = data['pmMaxSpareServers']
+        phpPath = data['phpPath']
+
+        if ACLManager.checkOwnership(domainName, admin, currentACL) == 1:
+            pass
+        else:
+            return ACLManager.loadErrorJson()
+
+        if int(pmStartServers) < int(pmMinSpareServers) or int(pmStartServers) > int(pmMinSpareServers):
+            data_ret = {'status': 0,
+                        'error_message': 'pm.start_servers must not be less than pm.min_spare_servers and not greater than pm.max_spare_servers.'}
+            json_data = json.dumps(data_ret)
+            return HttpResponse(json_data)
+
+        if int(pmMinSpareServers) > int(pmMaxSpareServers):
+            data_ret = {'status': 0,
+                        'error_message': 'pm.max_spare_servers must not be less than pm.min_spare_servers'}
+            json_data = json.dumps(data_ret)
+            return HttpResponse(json_data)
+
+        try:
+            website = Websites.objects.get(domain=domainName)
+            externalApp = website.externalApp
+        except:
+            website = ChildDomains.objects.get(domain=domainName)
+            externalApp = website.master.externalApp
+
+        tempStatusPath = "/home/cyberpanel/" + str(randint(1000, 9999))
+
+        phpFPMConf = vhostConfs.phpFpmPoolReplace
+        phpFPMConf = phpFPMConf.replace('{externalApp}', externalApp)
+        phpFPMConf = phpFPMConf.replace('{pmMaxChildren}', pmMaxChildren)
+        phpFPMConf = phpFPMConf.replace('{pmStartServers}', pmStartServers)
+        phpFPMConf = phpFPMConf.replace('{pmMinSpareServers}', pmMinSpareServers)
+        phpFPMConf = phpFPMConf.replace('{pmMaxSpareServers}', pmMaxSpareServers)
+        phpFPMConf = phpFPMConf.replace('{www}', "".join(re.findall("[a-zA-Z]+", domainName))[:7])
+        phpFPMConf = phpFPMConf.replace('{Sock}', domainName)
+
+        writeToFile = open(tempStatusPath, 'w')
+        writeToFile.writelines(phpFPMConf)
+        writeToFile.close()
+
+        command = 'sudo mv %s %s' % (tempStatusPath, phpPath)
+        ProcessUtilities.executioner(command)
+
+        phpPath = phpPath.split('/')
+
+        if phpPath[1] == 'etc':
+            phpVersion = phpPath[4][3] + phpPath[4][4]
+        else:
+            phpVersion = phpPath[3][3] + phpPath[3][4]
+
+        command = "systemctl stop php%s-php-fpm" % (phpVersion)
+        ProcessUtilities.executioner(command)
+
+        command = "systemctl restart php%s-php-fpm" % (phpVersion)
+        ProcessUtilities.executioner(command)
+
+        data_ret = {'status': 1}
+        json_data = json.dumps(data_ret)
+        return HttpResponse(json_data)
+
+    def sshAccess(self, request=None, userID=None, data=None):
+        try:
+            currentACL = ACLManager.loadedACL(userID)
+            admin = Administrator.objects.get(pk=userID)
+
+            if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadError()
+
+            website = Websites.objects.get(domain=self.domain)
+            externalApp = website.externalApp
+
+            return render(request, 'websiteFunctions/sshAccess.html',
+                          {'domainName': self.domain, 'externalApp': externalApp})
+        except BaseException, msg:
+            return HttpResponse(str(msg))
+
+    def saveSSHAccessChanges(self, userID=None, data=None):
+        try:
+
+            currentACL = ACLManager.loadedACL(userID)
+            admin = Administrator.objects.get(pk=userID)
+
+            self.domain = data['domain']
+
+            if ACLManager.checkOwnership(self.domain, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson('status', 0)
+
+            website = Websites.objects.get(domain=self.domain)
+
+            command = 'echo "%s" | passwd --stdin %s' % (data['password'], data['externalApp'])
+            ProcessUtilities.executioner(command)
+
+            data_ret = {'status': 1, 'error_message': 'None'}
+            json_data = json.dumps(data_ret)
+            return HttpResponse(json_data)
+
+        except BaseException, msg:
+            data_ret = {'status': 0, 'installStatus': 0, 'error_message': str(msg)}
+            json_data = json.dumps(data_ret)
+            return HttpResponse(json_data)

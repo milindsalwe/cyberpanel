@@ -15,14 +15,12 @@
 
         <div class="panel">
             <div ng-controller="createACLCTRL" class="panel-body">
-                <h3 class="title-hero">
+                <h3 class="content-box-header">
                     {% trans "ACL Details" %}
                 </h3>
                 <div class="example-box-wrapper">
 
-
-                    <form name="createUser" action="/" class="form-horizontal bordered-row">
-
+                    <form name="createUser" action="/" class="form-horizontal bordered-row panel-body">
 
                         <div class="form-group">
                             <label class="col-sm-3 control-label">{% trans "ACL Name" %}</label>
@@ -64,6 +62,15 @@
                                     <label>
                                         <input ng-model="createNewUser" type="checkbox" value="">
                                         {% trans "Create New User" %}
+                                    </label>
+                                </div>
+                            </div>
+                            <label class="col-sm-3 control-label"></label>
+                            <div class="col-sm-9">
+                                <div class="checkbox">
+                                    <label>
+                                        <input ng-model="listUsers" type="checkbox" value="">
+                                        {% trans "List Users" %}
                                     </label>
                                 </div>
                             </div>
@@ -143,6 +150,15 @@
                                     <label>
                                         <input ng-model="createPackage" type="checkbox" value="">
                                         {% trans "Create Package" %}
+                                    </label>
+                                </div>
+                            </div>
+                            <label class="col-sm-3 control-label"></label>
+                            <div class="col-sm-9">
+                                <div class="checkbox">
+                                    <label>
+                                        <input ng-model="listPackages" type="checkbox" value="">
+                                        {% trans "List Packages" %}
                                     </label>
                                 </div>
                             </div>
@@ -244,6 +260,15 @@
                                     <label>
                                         <input ng-model="createEmail" type="checkbox" value="">
                                         {% trans "Create Email" %}
+                                    </label>
+                                </div>
+                            </div>
+                            <label class="col-sm-3 control-label"></label>
+                            <div class="col-sm-9">
+                                <div class="checkbox">
+                                    <label>
+                                        <input ng-model="listEmails" type="checkbox" value="">
+                                        {% trans "List Emails" %}
                                     </label>
                                 </div>
                             </div>
@@ -404,7 +429,7 @@
                             <label class="col-sm-3 control-label"></label>
                             <div class="col-sm-4">
                                 <button type="button" ng-click="createACLFunc()"
-                                        class="btn btn-primary btn-lg btn-block">{% trans "Create ACL" %} <img
+                                        class="btn btn-primary btn-lg">{% trans "Create ACL" %} <img
                                         ng-hide="aclLoading" src="{% static 'images/loading.gif' %}"></button>
                             </div>
                         </div>

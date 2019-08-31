@@ -29,7 +29,6 @@ class remoteBackup:
             logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [getKey]")
             return [0,"Not able to fetch key from remote server, Error Message:" + str(msg)]
 
-
     @staticmethod
     def startRestore(backupDir,backupLogPath,dir):
         try:
@@ -212,7 +211,7 @@ class remoteBackup:
             writeToFile.writelines("\n")
 
         except BaseException,msg:
-            logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [startBackup]")
+            logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [214:startBackup]")
 
 
     @staticmethod
@@ -362,4 +361,3 @@ class remoteBackup:
         except BaseException, msg:
             logging.CyberCPLogFileWriter.writeToFile(str(msg) + " [remoteTransfer]")
             return [0, msg]
-

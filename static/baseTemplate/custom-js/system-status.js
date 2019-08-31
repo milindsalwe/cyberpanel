@@ -22,6 +22,16 @@ function getCookie(name) {
     return cookieValue;
 }
 
+function randomPassword(length) {
+    var chars = "abcdefghijklmnopqrstuvwxyz!@#%^*-+ABCDEFGHIJKLMNOP1234567890";
+    var pass = "";
+    for (var x = 0; x < length; x++) {
+        var i = Math.floor(Math.random() * chars.length);
+        pass += chars.charAt(i);
+    }
+    return pass;
+}
+
 /* Utilities ends here */
 
 
@@ -116,6 +126,9 @@ app.controller('adminController', function($scope,$http,$timeout) {
                 if(!Boolean(response.data.createNewUser)){
                      $('.createNewUser').hide();
                  }
+                if(!Boolean(response.data.listUsers)){
+                     $('.listUsers').hide();
+                 }
                 if(!Boolean(response.data.resellerCenter)){
                      $('.resellerCenter').hide();
                  }
@@ -148,6 +161,10 @@ app.controller('adminController', function($scope,$http,$timeout) {
                      $('.createPackage').hide();
                  }
 
+               if(!Boolean(response.data.listPackages)){
+                     $('.listPackages').hide();
+                 }
+
                 if(!Boolean(response.data.deletePackage)){
                      $('.deletePackage').hide();
                  }
@@ -172,6 +189,10 @@ app.controller('adminController', function($scope,$http,$timeout) {
 
               // DNS Management
 
+                 if(!Boolean(response.data.dnsAsWhole)){
+                     $('.dnsAsWhole').hide();
+                 }
+
                if(!Boolean(response.data.createNameServer)){
                      $('.createNameServer').hide();
                  }
@@ -189,6 +210,14 @@ app.controller('adminController', function($scope,$http,$timeout) {
                }
 
              // Email Management
+
+               if(!Boolean(response.data.emailAsWhole)){
+                     $('.emailAsWhole').hide();
+                 }
+
+               if(!Boolean(response.data.listEmails)){
+                     $('.listEmails').hide();
+                 }
 
                if(!Boolean(response.data.createEmail)){
                      $('.createEmail').hide();
@@ -212,6 +241,10 @@ app.controller('adminController', function($scope,$http,$timeout) {
 
 
               // FTP Management
+
+                 if(!Boolean(response.data.ftpAsWhole)){
+                     $('.ftpAsWhole').hide();
+                 }
 
                if(!Boolean(response.data.createFTPAccount)){
                      $('.createFTPAccount').hide();
@@ -263,7 +296,20 @@ app.controller('adminController', function($scope,$http,$timeout) {
                 }
 
 
-            }
+            }else{
+
+               if(!Boolean(response.data.emailAsWhole)){
+                     $('.emailAsWhole').hide();
+                 }
+
+               if(!Boolean(response.data.ftpAsWhole)){
+                     $('.ftpAsWhole').hide();
+                 }
+
+               if(!Boolean(response.data.dnsAsWhole)){
+                     $('.dnsAsWhole').hide();
+                 }
+             }
         }
 
         function cantLoadInitialData(response) {}

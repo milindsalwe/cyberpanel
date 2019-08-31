@@ -70,6 +70,13 @@ class tuningManager:
     def tuneLitespeed(self, userID, data):
         try:
 
+            currentACL = ACLManager.loadedACL(userID)
+
+            if currentACL['admin'] == 1:
+                pass
+            else:
+                return ACLManager.loadError()
+
             status = data['status']
             if status == "fetch":
 
@@ -117,11 +124,9 @@ class tuningManager:
                 inMemCache = data['inMemCache']
                 gzipCompression = data['gzipCompression']
 
-                execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/tuning.py"
-
+                execPath = "/usr/local/CyberCP/bin/python2 " + virtualHostUtilities.cyberPanel + "/plogical/tuning.py"
                 execPath = execPath + " saveTuningDetails --maxConn " + maxConn + " --maxSSLConn " + maxSSLConn + " --connTime " + connTime + " --keepAlive " + keepAlive + " --inMemCache '" + inMemCache + "' --gzipCompression " + gzipCompression
-
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
 
                 if output.find("1,None") > -1:
                     data_ret = {'fetch_status': 1, 'error_message': "None", 'tuneStatus': 1}
@@ -139,6 +144,14 @@ class tuningManager:
 
     def tunePHP(self, userID, data):
         try:
+
+            currentACL = ACLManager.loadedACL(userID)
+
+            if currentACL['admin'] == 1:
+                pass
+            else:
+                return ACLManager.loadError()
+
             status = data['status']
             domainSelection = str(data['domainSelection'])
 
@@ -162,11 +175,10 @@ class tuningManager:
                 procHardLimit = str(data['procHardLimit'])
                 persistConn = data['persistConn']
 
-                execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/tuning.py"
-
+                execPath = "/usr/local/CyberCP/bin/python2 " + virtualHostUtilities.cyberPanel + "/plogical/tuning.py"
                 execPath = execPath + " tunePHP --virtualHost " + domainSelection + " --initTimeout " + initTimeout + " --maxConns " + maxConns + " --memSoftLimit " + memSoftLimit + " --memHardLimit '" + memHardLimit + "' --procSoftLimit " + procSoftLimit + " --procHardLimit " + procHardLimit + " --persistConn " + persistConn
 
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
 
                 if output.find("1,None") > -1:
                     data_ret = {'tuneStatus': 1, 'fetch_status': 0, 'error_message': "None"}

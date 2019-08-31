@@ -39,9 +39,6 @@ application.config(['$interpolateProvider',
     }
 ]);
 
-
-
-
 application.controller('loginSystem', function($scope,$http,$window) {
 
 
@@ -81,7 +78,7 @@ application.controller('loginSystem', function($scope,$http,$window) {
                     }
                     else{
                         $("#loginFailed").hide();
-                        $window.location.href = '/base';
+                        $window.location.href = '/base/';
                     }
 
 
@@ -94,8 +91,18 @@ application.controller('loginSystem', function($scope,$http,$window) {
 
 
         };
+
+    $scope.initiateLogin = function($event){
+    var keyCode = $event.which || $event.keyCode;
+    if (keyCode === 13) {
+        $scope.verifyLoginCredentials();
+
+    }
+
+  };
+
+
 });
 
 
 /* Java script code to to Check Login status ends here */
-

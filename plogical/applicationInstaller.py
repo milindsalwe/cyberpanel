@@ -16,7 +16,7 @@ from databases.models import Databases
 from installUtilities import installUtilities
 import shutil
 from plogical.mailUtilities import mailUtilities
-
+from plogical.processUtilities import ProcessUtilities
 
 class ApplicationInstaller(multi.Thread):
 
@@ -48,13 +48,13 @@ class ApplicationInstaller(multi.Thread):
     def installWPCLI(self):
         try:
             command = 'sudo wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar'
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command)
 
             command = 'sudo chmod +x wp-cli.phar'
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command)
 
             command = 'sudo mv wp-cli.phar /usr/bin/wp'
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command)
 
         except BaseException, msg:
             logging.writeToFile( str(msg) + ' [ApplicationInstaller.installWPCLI]')
@@ -94,13 +94,13 @@ class ApplicationInstaller(multi.Thread):
         try:
             if os.path.exists("/etc/lsb-release"):
                 command = 'apt -y install git'
-                subprocess.call(shlex.split(command))
+                ProcessUtilities.executioner(command)
             else:
                 command = 'sudo yum -y install http://repo.iotti.biz/CentOS/7/noarch/lux-release-7-1.noarch.rpm'
-                subprocess.call(shlex.split(command))
+                ProcessUtilities.executioner(command)
 
                 command = 'sudo yum install git -y'
-                subprocess.call(shlex.split(command))
+                ProcessUtilities.executioner(command)
 
         except BaseException, msg:
             logging.writeToFile( str(msg) + ' [ApplicationInstaller.installGit]')
@@ -158,9 +158,9 @@ class ApplicationInstaller(multi.Thread):
 
             try:
                 command = 'sudo wp --info'
-                res = subprocess.call(shlex.split(command))
+                outout = ProcessUtilities.outputExecutioner(command)
 
-                if res == 1:
+                if not outout.find('WP-CLI root dir:') > -1:
                     self.installWPCLI()
             except subprocess.CalledProcessError:
                 self.installWPCLI()
@@ -235,7 +235,7 @@ class ApplicationInstaller(multi.Thread):
 
             if not os.path.exists(finalPath):
                 command = 'sudo mkdir -p ' + finalPath
-                subprocess.call(shlex.split(command))
+                ProcessUtilities.executioner(command, externalApp)
 
             ## checking for directories/files
 
@@ -249,7 +249,7 @@ class ApplicationInstaller(multi.Thread):
             statusFile.close()
 
             command = "sudo wp core download --allow-root --path=" + finalPath
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
@@ -258,7 +258,7 @@ class ApplicationInstaller(multi.Thread):
             statusFile.close()
 
             command = "sudo wp core config --dbname=" + dbName + " --dbuser=" + dbUser + " --dbpass=" + dbPassword + " --dbhost=localhost --dbprefix=wp_ --allow-root --path=" + finalPath
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             if home == '0':
                 path = self.extraArgs['path']
@@ -267,7 +267,7 @@ class ApplicationInstaller(multi.Thread):
                 finalURL = domainName
 
             command = 'sudo wp core install --url="http://' + finalURL + '" --title="' + blogTitle + '" --admin_user="' + adminUser + '" --admin_password="' + adminPassword + '" --admin_email="' + adminEmail + '" --allow-root --path=' + finalPath
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
@@ -276,21 +276,20 @@ class ApplicationInstaller(multi.Thread):
             statusFile.close()
 
             command = "sudo wp plugin install litespeed-cache --allow-root --path=" + finalPath
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             statusFile = open(tempStatusPath, 'w')
             statusFile.writelines('Activating LSCache Plugin,90')
             statusFile.close()
 
             command = "sudo wp plugin activate litespeed-cache --allow-root --path=" + finalPath
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
 
             command = "sudo chown -R " + externalApp + ":" + externalApp + " " + finalPath
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.executioner(command, externalApp)
 
             statusFile = open(tempStatusPath, 'w')
             statusFile.writelines("Successfully Installed. [200]")
@@ -307,8 +306,7 @@ class ApplicationInstaller(multi.Thread):
             if not os.path.exists(homeDir):
 
                 command = "sudo chown -R " + externalApp + ":" + externalApp + " " + homeDir
-                cmd = shlex.split(command)
-                res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+                ProcessUtilities.executioner(command, externalApp)
 
             try:
                 mysqlUtilities.deleteDatabase(dbName, dbUser)
@@ -406,7 +404,7 @@ class ApplicationInstaller(multi.Thread):
 
             if not os.path.exists(finalPath):
                 command = 'sudo mkdir -p ' + finalPath
-                subprocess.call(shlex.split(command))
+                ProcessUtilities.executioner(command, externalApp)
 
             ## checking for directories/files
 
@@ -419,14 +417,14 @@ class ApplicationInstaller(multi.Thread):
             statusFile.writelines('Downloading and extracting PrestaShop Core..,30')
             statusFile.close()
 
-            command = "sudo wget https://download.prestashop.com/download/releases/prestashop_1.7.4.2.zip"
-            subprocess.call(shlex.split(command))
+            command = "sudo wget https://download.prestashop.com/download/releases/prestashop_1.7.4.2.zip -P %s" % (finalPath)
+            ProcessUtilities.executioner(command, externalApp)
 
-            command = "sudo unzip -o prestashop_1.7.4.2.zip -d " + finalPath
-            subprocess.call(shlex.split(command))
+            command = "sudo unzip -o %sprestashop_1.7.4.2.zip -d " % (finalPath) + finalPath
+            ProcessUtilities.executioner(command, externalApp)
 
-            command = "sudo unzip -o " + finalPath + "prestashop.zip -d " + finalPath
-            subprocess.call(shlex.split(command))
+            command = "sudo unzip -o %sprestashop.zip -d " % (finalPath) + finalPath
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
@@ -449,22 +447,20 @@ class ApplicationInstaller(multi.Thread):
                       " --db_server=localhost --db_name=" + dbName + " --db_user=" + dbUser + " --db_password=" + dbPassword \
                       + " --name='" + shopName + "' --firstname=" + firstName + " --lastname=" + lastName + \
                       " --email=" + email + " --password=" + password
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
             command = "sudo rm -rf " + finalPath + "install"
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
             command = "sudo chown -R " + externalApp + ":" + externalApp + " " + finalPath
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.executioner(command, externalApp)
 
             command = "sudo rm -f prestashop_1.7.4.2.zip"
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.executioner(command, externalApp)
 
             statusFile = open(tempStatusPath, 'w')
             statusFile.writelines("Successfully Installed. [200]")
@@ -479,8 +475,7 @@ class ApplicationInstaller(multi.Thread):
 
             if not os.path.exists(homeDir):
                 command = "sudo chown -R " + externalApp + ":" + externalApp + " " + homeDir
-                cmd = shlex.split(command)
-                res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+                ProcessUtilities.executioner(command, externalApp)
 
             try:
                 mysqlUtilities.deleteDatabase(dbName, dbUser)
@@ -512,9 +507,9 @@ class ApplicationInstaller(multi.Thread):
 
             try:
                 command = 'sudo git --help'
-                res = subprocess.call(shlex.split(command))
+                output = ProcessUtilities.outputExecutioner(command)
 
-                if res == 1:
+                if output.find('command not found') > -1:
                     statusFile = open(tempStatusPath, 'w')
                     statusFile.writelines('Installing GIT..,0')
                     statusFile.close()
@@ -547,6 +542,8 @@ class ApplicationInstaller(multi.Thread):
                 externalApp = website.externalApp
                 finalPath = "/home/" + domainName + "/public_html/"
 
+
+
             ## Security Check
 
             if finalPath.find("..") > -1:
@@ -555,15 +552,11 @@ class ApplicationInstaller(multi.Thread):
                 statusFile.close()
                 return 0
 
-            FNULL = open(os.devnull, 'w')
 
-            if not os.path.exists(finalPath):
-                command = 'sudo mkdir -p ' + finalPath
-                subprocess.call(shlex.split(command))
+            command = 'sudo mkdir -p ' + finalPath
+            ProcessUtilities.executioner(command, externalApp)
 
             ## checking for directories/files
-
-            logging.writeToFile(finalPath)
 
             if self.dataLossCheck(finalPath, tempStatusPath) == 0:
                 return 0
@@ -575,9 +568,8 @@ class ApplicationInstaller(multi.Thread):
             statusFile.close()
 
             try:
-
-                command = 'sudo git clone https://' + defaultProvider +'.com/' + username + '/' + reponame + ' -b ' + branch + ' ' + finalPath
-                subprocess.check_output(shlex.split(command))
+                command = 'git clone --depth 1 --no-single-branch git@' + defaultProvider +'.com:' + username + '/' + reponame + '.git -b ' + branch + ' ' + finalPath
+                ProcessUtilities.executioner(command, externalApp)
             except subprocess.CalledProcessError, msg:
                 statusFile = open(tempStatusPath, 'w')
                 statusFile.writelines('Failed to clone repository, make sure you deployed your key to repository. [404]')
@@ -587,8 +579,7 @@ class ApplicationInstaller(multi.Thread):
             ##
 
             command = "sudo chown -R " + externalApp + ":" + externalApp + " " + finalPath
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.executioner(command, externalApp)
 
             vhost.addRewriteRules(domainName)
             installUtilities.reStartLiteSpeed()
@@ -620,9 +611,11 @@ class ApplicationInstaller(multi.Thread):
             try:
                 website = Websites.objects.get(domain=domain)
                 finalPath = "/home/" + domain + "/public_html/"
+                externalApp = website.externalApp
             except:
                 childDomain = ChildDomains.objects.get(domain=domain)
                 finalPath = childDomain.path
+                externalApp = website.externalApp
 
             path = '/home/cyberpanel/' + domain + '.git'
 
@@ -631,7 +624,7 @@ class ApplicationInstaller(multi.Thread):
                 return 0
 
             command = 'sudo git --git-dir=' + finalPath + '.git --work-tree=' + finalPath +'  pull'
-            subprocess.check_output(shlex.split(command))
+            ProcessUtilities.executioner(command, externalApp)
 
             ##
 
@@ -639,8 +632,7 @@ class ApplicationInstaller(multi.Thread):
             externalApp = website.externalApp
 
             command = "sudo chown -R " + externalApp + ":" + externalApp + " " + finalPath
-            cmd = shlex.split(command)
-            subprocess.call(cmd)
+            ProcessUtilities.executioner(command, externalApp)
 
             return 0
 
@@ -672,16 +664,15 @@ class ApplicationInstaller(multi.Thread):
 
 
             command = 'sudo rm -rf ' + finalPath
-            subprocess.check_output(shlex.split(command))
+            ProcessUtilities.executioner(command, website.externalApp)
 
             command = 'sudo mkdir ' + finalPath
-            subprocess.check_output(shlex.split(command))
+            ProcessUtilities.executioner(command, website.externalApp)
 
             ##
 
             command = "sudo chown -R " + externalApp + ":" + externalApp + " " + finalPath
-            cmd = shlex.split(command)
-            subprocess.call(cmd)
+            ProcessUtilities.executioner(command, website.externalApp)
 
             gitPath = '/home/cyberpanel/' + domain + '.git'
 
@@ -710,8 +701,6 @@ class ApplicationInstaller(multi.Thread):
             sitename = self.extraArgs['sitename']
             tempStatusPath = self.extraArgs['tempStatusPath']
 
-
-
             FNULL = open(os.devnull, 'w')
 
             if not os.path.exists(finalPath):
@@ -728,8 +717,7 @@ class ApplicationInstaller(multi.Thread):
 
             if not os.path.exists("staging.zip"):
                 command = 'wget --no-check-certificate https://github.com/joomla/joomla-cms/archive/staging.zip -P ' + finalPath
-                cmd = shlex.split(command)
-                res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+                ProcessUtilities.normalExecutioner(command)
             else:
                 statusFile = open(tempStatusPath, 'w')
                 statusFile.writelines("File already exists." + " [404]")
@@ -737,14 +725,12 @@ class ApplicationInstaller(multi.Thread):
                 return 0
 
             command = 'unzip ' + finalPath + 'staging.zip -d ' + finalPath
-            cmd = shlex.split(command)
+            ProcessUtilities.normalExecutioner(command)
 
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
             os.remove(finalPath + 'staging.zip')
 
             command = 'cp -r ' + finalPath + 'joomla-cms-staging/. ' + finalPath
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.normalExecutioner(command)
 
             shutil.rmtree(finalPath + "joomla-cms-staging")
             os.rename(finalPath + "installation/configuration.php-dist", finalPath + "configuration.php")
@@ -830,8 +816,7 @@ class ApplicationInstaller(multi.Thread):
             shutil.rmtree(finalPath + "installation")
 
             command = "sudo chown -R " + virtualHostUser + ":" + virtualHostUser + " " + finalPath
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+            ProcessUtilities.normalExecutioner(command)
 
             vhost.addRewriteRules(domainName)
 
@@ -849,8 +834,7 @@ class ApplicationInstaller(multi.Thread):
 
             if not os.path.exists(homeDir):
                 command = "sudo chown -R " + virtualHostUser + ":" + virtualHostUser + " " + homeDir
-                cmd = shlex.split(command)
-                res = subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+                ProcessUtilities.executioner(command)
 
             try:
                 mysqlUtilities.deleteDatabase(dbName, dbUser)
@@ -862,6 +846,7 @@ class ApplicationInstaller(multi.Thread):
             statusFile = open(tempStatusPath, 'w')
             statusFile.writelines(str(msg) + " [404]")
             statusFile.close()
+            logging.writeToFile(str(msg))
             return 0
 
     def changeBranch(self):
@@ -870,27 +855,26 @@ class ApplicationInstaller(multi.Thread):
             githubBranch = self.extraArgs['githubBranch']
             admin = self.extraArgs['admin']
 
-
             try:
                 website = Websites.objects.get(domain=domainName)
                 finalPath = "/home/" + domainName + "/public_html/"
+                externalApp = website.externalApp
             except:
                 childDomain = ChildDomains.objects.get(domain=domainName)
                 finalPath = childDomain.path
+                externalApp = childDomain.master.externalApp
 
             try:
-                command = 'sudo GIT_SSH_COMMAND="ssh -i /root/.ssh/cyberpanel  -o StrictHostKeyChecking=no" git -C ' + finalPath + '  checkout -b ' + githubBranch
-                subprocess.check_output(shlex.split(command))
-
-            except subprocess.CalledProcessError, msg:
-                logging.writeToFile('Failed to change branch: ' +  str(msg))
-                return 0
-
-            ##
-
-
+                command = 'sudo git --git-dir=' + finalPath + '/.git  checkout -b ' + githubBranch
+                ProcessUtilities.executioner(command, externalApp)
+            except:
+                try:
+                    command = 'sudo git --git-dir=' + finalPath + '/.git  checkout ' + githubBranch
+                    ProcessUtilities.executioner(command, externalApp)
+                except subprocess.CalledProcessError, msg:
+                    logging.writeToFile('Failed to change branch: ' +  str(msg))
+                    return 0
             return 0
-
-
         except BaseException, msg:
+            logging.writeToFile('Failed to change branch: ' + str(msg))
             return 0

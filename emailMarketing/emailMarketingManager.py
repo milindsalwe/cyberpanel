@@ -134,7 +134,7 @@ class EmailMarketingManager:
             extraArgs = {}
             extraArgs['domain'] = data['domain']
             extraArgs['path'] = data['path']
-            extraArgs['listName'] = data['listName']
+            extraArgs['listName'] = data['listName'].replace(' ', '')
             extraArgs['tempStatusPath'] = "/home/cyberpanel/" + str(randint(1000, 9999))
 
             userID = self.request.session['userID']
@@ -205,7 +205,7 @@ class EmailMarketingManager:
             if currentACL['admin'] == 1:
                 pass
             elif emailList.owner.id != userID:
-                ACLManager.loadErrorJson()
+                return ACLManager.loadErrorJson()
 
             emails = emailList.emailsinlist_set.all()
 
@@ -274,7 +274,7 @@ class EmailMarketingManager:
             if currentACL['admin'] == 1:
                 pass
             elif delList.owner.id != userID:
-                ACLManager.loadErrorJson()
+                return ACLManager.loadErrorJson()
 
             delList.delete()
 
@@ -304,7 +304,7 @@ class EmailMarketingManager:
             if currentACL['admin'] == 1:
                 pass
             elif delList.owner.id != userID:
-                ACLManager.loadErrorJson()
+                return ACLManager.loadErrorJson()
 
             em = EM('verificationJob', extraArgs)
             em.start()
@@ -337,7 +337,7 @@ class EmailMarketingManager:
             if currentACL['admin'] == 1:
                 pass
             elif delEmail.owner.owner.id != userID:
-                ACLManager.loadErrorJson()
+                return ACLManager.loadErrorJson()
 
             delEmail.delete()
 
@@ -395,8 +395,8 @@ class EmailMarketingManager:
                 defaultHost.save()
 
             try:
-                verifyLogin = smtplib.SMTP(smtpHost, int(smtpPort))
-                verifyLogin.login(smtpUserName, smtpPassword)
+                verifyLogin = smtplib.SMTP(str(smtpHost), int(smtpPort))
+                verifyLogin.login(str(smtpUserName), str(smtpPassword))
 
                 admin = Administrator.objects.get(pk=userID)
 
@@ -488,7 +488,7 @@ class EmailMarketingManager:
                 if currentACL['admin'] == 1:
                     pass
                 elif delHost.owner.id != userID:
-                    ACLManager.loadErrorJson()
+                    return ACLManager.loadErrorJson()
                 delHost.delete()
                 data_ret = {"status": 1, 'message': 'Successfully deleted.'}
                 json_data = json.dumps(data_ret)
@@ -496,8 +496,8 @@ class EmailMarketingManager:
             else:
                 try:
                     verifyHost = SMTPHosts.objects.get(id=id)
-                    verifyLogin = smtplib.SMTP(verifyHost.host, int(verifyHost.port))
-                    verifyLogin.login(verifyHost.userName, verifyHost.password)
+                    verifyLogin = smtplib.SMTP(str(verifyHost.host), int(verifyHost.port))
+                    verifyLogin.login(str(verifyHost.userName), str(verifyHost.password))
 
                     data_ret = {"status": 1, 'message': 'Login successful.'}
                     json_data = json.dumps(data_ret)
@@ -550,7 +550,7 @@ class EmailMarketingManager:
             emailMessage = data['emailMessage']
 
             admin = Administrator.objects.get(pk=userID)
-            newTemplate = EmailTemplate(owner=admin, name=name, subject=subject, fromName=fromName, fromEmail=fromEmail,
+            newTemplate = EmailTemplate(owner=admin, name=name.replace(' ', ''), subject=subject, fromName=fromName, fromEmail=fromEmail,
                                         replyTo=replyTo, emailMessage=emailMessage)
             newTemplate.save()
 

@@ -28,9 +28,6 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
-
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -64,7 +61,10 @@ INSTALLED_APPS = [
     'emailMarketing',
     'cloudAPI',
     'highAvailability',
-    's3Backups'
+    's3Backups',
+    'dockerManager',
+    'containerization',
+    'CLManager'
 ]
 
 MIDDLEWARE = [
@@ -72,6 +72,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -158,7 +159,6 @@ USE_L10N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.11/howto/static-files/
 
@@ -184,4 +184,8 @@ LANGUAGES = (
     ('fr', _('French')),
     ('pl', _('Polish')),
     ('vi', _('Vietnamese')),
+    ('it', _('Italian')),
 )
+
+MEDIA_URL = '/home/cyberpanel/media/'
+MEDIA_ROOT = MEDIA_URL

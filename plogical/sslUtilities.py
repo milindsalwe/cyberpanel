@@ -4,7 +4,10 @@ import shlex
 import subprocess
 import socket
 from plogical.processUtilities import ProcessUtilities
-from websiteFunctions.models import ChildDomains, Websites
+try:
+    from websiteFunctions.models import ChildDomains, Websites
+except:
+    pass
 
 class sslUtilities:
 
@@ -187,33 +190,26 @@ class sslUtilities:
 
                 confFile = open(completePathToConfigFile, 'a')
 
-                doNotModify = '\n\n# Do not modify this file, this is auto-generated file.\n\n'
+                cacheRoot = """    <IfModule LiteSpeed>
+        CacheRoot lscache
+    </IfModule>
+"""
 
-                VirtualHost = '<VirtualHost *:443>\n\n'
+                VirtualHost = '\n<VirtualHost *:443>\n\n'
                 ServerName = '    ServerName ' + virtualHostName + '\n'
                 ServerAlias = '    ServerAlias www.' + virtualHostName + '\n'
-                ScriptAlias = '    Alias /.filemanager/ /usr/local/lsws/FileManager\n'
                 ServerAdmin = '    ServerAdmin ' + adminEmail + '\n'
                 SeexecUserGroup = '    SuexecUserGroup ' + externalApp + ' ' + externalApp + '\n'
                 CustomLogCombined = '    CustomLog /home/' + virtualHostName + '/logs/' + virtualHostName + '.access_log combined\n'
 
-                confFile.writelines(doNotModify)
                 confFile.writelines(VirtualHost)
                 confFile.writelines(ServerName)
                 confFile.writelines(ServerAlias)
-                confFile.writelines(ScriptAlias)
                 confFile.writelines(ServerAdmin)
                 confFile.writelines(SeexecUserGroup)
                 confFile.writelines(DocumentRoot)
                 confFile.writelines(CustomLogCombined)
-                DirectoryFileManager = """\n    <Directory /usr/local/lsws/FileManager>
-                            AllowOverride All
-                            Options +Includes -Indexes +ExecCGI
-                            php_value display_errors "Off"
-                            php_value upload_max_filesize "200M"
-                            php_value post_max_size "250M"
-                        </Directory>\n"""
-                confFile.writelines(DirectoryFileManager)
+                confFile.writelines(cacheRoot)
 
                 SSLEngine = '    SSLEngine on\n'
                 SSLVerifyClient = '    SSLVerifyClient none\n'
@@ -241,12 +237,8 @@ class sslUtilities:
         try:
             acmePath = '/root/.acme.sh/acme.sh'
 
-            if ProcessUtilities.decideDistro() == ProcessUtilities.ubuntu:
-                acmePath = '/home/cyberpanel/.acme.sh/acme.sh'
-
-            if not os.path.exists(acmePath):
-                command = 'wget -O -  https://get.acme.sh | sh'
-                subprocess.call(command, shell=True)
+            # if ProcessUtilities.decideDistro() == ProcessUtilities.ubuntu:
+            #     acmePath = '/home/cyberpanel/.acme.sh/acme.sh'
 
             if aliasDomain == None:
 

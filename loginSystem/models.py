@@ -14,6 +14,7 @@ class ACL(models.Model):
 
    ## User Management
    createNewUser = models.IntegerField(default=0)
+   listUsers = models.IntegerField(default=0)
    deleteUser = models.IntegerField(default=0)
    resellerCenter = models.IntegerField(default=0)
    changeUserACL = models.IntegerField(default=0)
@@ -28,6 +29,7 @@ class ACL(models.Model):
    ## Package Management
 
    createPackage = models.IntegerField(default=0)
+   listPackages = models.IntegerField(default=0)
    deletePackage = models.IntegerField(default=0)
    modifyPackage = models.IntegerField(default=0)
 
@@ -47,6 +49,7 @@ class ACL(models.Model):
    ## Email Management
 
    createEmail = models.IntegerField(default=1)
+   listEmails = models.IntegerField(default=1)
    deleteEmail = models.IntegerField(default=1)
    emailForwarding = models.IntegerField(default=1)
    changeEmailPassword = models.IntegerField(default=1)
@@ -81,6 +84,7 @@ class Administrator(models.Model):
    type = models.IntegerField()
    owner = models.IntegerField(default=1)
    token = models.CharField(max_length=500, default='None')
+   api = models.IntegerField(default=0)
 
    initWebsitesLimit = models.IntegerField(default=0)
    acl = models.ForeignKey(ACL, default=1)

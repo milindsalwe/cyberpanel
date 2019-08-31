@@ -40,4 +40,7 @@ urlpatterns = [
     url(r'^plugins/',include('pluginHolder.urls')),
     url(r'^emailMarketing/', include('emailMarketing.urls')),
     url(r'^cloudAPI/', include('cloudAPI.urls')),
+    url(r'^docker/', include('dockerManager.urls')),
+    url(r'^container/', include('containerization.urls')),
+    url(r'^CloudLinux/', include('CLManager.urls')),
 ]

@@ -2,24 +2,49 @@ import os,sys
 sys.path.append('/usr/local/CyberCP')
 import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "CyberCP.settings")
-django.setup()
+try:
+    django.setup()
+except:
+    pass
 import os.path
 import shutil
 import CyberCPLogFileWriter as logging
 import subprocess
 import argparse
 import shlex
-from mailServer.models import Domains,EUsers
-from emailPremium.models import DomainLimits, EmailLimits
-from websiteFunctions.models import Websites
 from processUtilities import ProcessUtilities
+import os, getpass
+import hashlib
+import bcrypt
+import getpass
 
+try:
+    from mailServer.models import Domains, EUsers
+    from emailPremium.models import DomainLimits, EmailLimits
+    from websiteFunctions.models import Websites, ChildDomains
+except:
+    pass
 
 class mailUtilities:
 
     installLogPath = "/home/cyberpanel/openDKIMInstallLog"
     spamassassinInstallLogPath = "/home/cyberpanel/spamassassinInstallLogPath"
     cyberPanelHome = "/home/cyberpanel"
+
+    @staticmethod
+    def AfterEffects(domain):
+        path = "/usr/local/CyberCP/install/rainloop/cyberpanel.net.ini"
+
+        if not os.path.exists("/usr/local/lscp/cyberpanel/rainloop/data/_data_/_default_/domains/"):
+            os.makedirs("/usr/local/lscp/cyberpanel/rainloop/data/_data_/_default_/domains/")
+
+        finalPath = "/usr/local/lscp/cyberpanel/rainloop/data/_data_/_default_/domains/" + domain + ".ini"
+
+        if not os.path.exists(finalPath):
+            shutil.copy(path, finalPath)
+
+        command = 'chown -R lscpd:lscpd /usr/local/lscp/cyberpanel/rainloop/data/'
+        ProcessUtilities.normalExecutioner(command)
 
     @staticmethod
     def createEmailAccount(domain, userName, password):
@@ -34,66 +59,91 @@ class mailUtilities:
 
             ## Check for email limits.
 
-            website = Websites.objects.get(domain=domain)
+            ChildCheck = 0
+            try:
+                website = Websites.objects.get(domain=domain)
+            except:
+                website = ChildDomains.objects.get(domain=domain)
+                ChildCheck = 1
 
             try:
 
                 if not Domains.objects.filter(domain=domain).exists():
-                    newEmailDomain = Domains(domainOwner=website, domain=domain)
+                    if ChildCheck == 0:
+                        newEmailDomain = Domains(domainOwner=website, domain=domain)
+                    else:
+                        newEmailDomain = Domains(childOwner=website, domain=domain)
+
                     newEmailDomain.save()
 
                 if not DomainLimits.objects.filter(domain=newEmailDomain).exists():
                     domainLimits = DomainLimits(domain=newEmailDomain)
                     domainLimits.save()
 
-                if website.package.emailAccounts == 0 or (
-                            newEmailDomain.eusers_set.all().count() < website.package.emailAccounts):
-                    pass
+                if ChildCheck == 0:
+                    if website.package.emailAccounts == 0 or (
+                                newEmailDomain.eusers_set.all().count() < website.package.emailAccounts):
+                        pass
+                    else:
+                        raise BaseException("Exceeded maximum amount of email accounts allowed for the package.")
                 else:
-                    raise BaseException("Exceeded maximum amount of email accounts allowed for the package.")
+                    if website.master.package.emailAccounts == 0 or (
+                                newEmailDomain.eusers_set.all().count() < website.master.package.emailAccounts):
+                        pass
+                    else:
+                        raise BaseException("Exceeded maximum amount of email accounts allowed for the package.")
 
             except:
 
                 emailDomain = Domains.objects.get(domain=domain)
-
-                if website.package.emailAccounts == 0 or (
-                            emailDomain.eusers_set.all().count() < website.package.emailAccounts):
-                    pass
+                if ChildCheck == 0:
+                    if website.package.emailAccounts == 0 or (
+                                emailDomain.eusers_set.all().count() < website.package.emailAccounts):
+                        pass
+                    else:
+                        raise BaseException("Exceeded maximum amount of email accounts allowed for the package.")
                 else:
-                    raise BaseException("Exceeded maximum amount of email accounts allowed for the package.")
+                    if website.master.package.emailAccounts == 0 or (
+                                emailDomain.eusers_set.all().count() < website.master.package.emailAccounts):
+                        pass
+                    else:
+                        raise BaseException("Exceeded maximum amount of email accounts allowed for the package.")
 
 
             ## After effects
 
+            execPath = "/usr/local/CyberCP/bin/python2 /usr/local/CyberCP/plogical/mailUtilities.py"
+            execPath = execPath + " AfterEffects --domain " + domain
 
-            path = "/usr/local/CyberCP/install/rainloop/cyberpanel.net.ini"
-
-            if not os.path.exists("/usr/local/lscp/cyberpanel/rainloop/data/_data_/_default_/domains/"):
-                os.makedirs("/usr/local/lscp/cyberpanel/rainloop/data/_data_/_default_/domains/")
-
-            finalPath = "/usr/local/lscp/cyberpanel/rainloop/data/_data_/_default_/domains/" + domain + ".ini"
-
-            if not os.path.exists(finalPath):
-                shutil.copy(path, finalPath)
-
-            command = 'chown -R lscpd:lscpd /usr/local/lscp/cyberpanel/rainloop'
-
-            cmd = shlex.split(command)
-
-            res = subprocess.call(cmd)
-
-            command = 'chown -R lscpd:lscpd /usr/local/lscp/cyberpanel/rainloop/data/_data_'
-
-            cmd = shlex.split(command)
-
-            res = subprocess.call(cmd)
+            if getpass.getuser() == 'root':
+                ## This is the case when cPanel Importer is running and token is not present in enviroment.
+                ProcessUtilities.normalExecutioner(execPath)
+            else:
+                ProcessUtilities.executioner(execPath, 'lscpd')
 
             ## After effects ends
 
             emailDomain = Domains.objects.get(domain=domain)
 
-            emailAcct = EUsers(emailOwner=emailDomain, email=finalEmailUsername, password=password)
-            emailAcct.save()
+            hash = hashlib.md5()
+            hash.update(password)
+
+            #emailAcct = EUsers(emailOwner=emailDomain, email=finalEmailUsername, password=hash.hexdigest())
+
+            CentOSPath = '/etc/redhat-release'
+
+            if os.path.exists(CentOSPath):
+                password = bcrypt.hashpw(str(password), bcrypt.gensalt())
+                password = '{CRYPT}%s' % (password)
+                emailAcct = EUsers(emailOwner=emailDomain, email=finalEmailUsername, password=password)
+                emailAcct.mail = 'maildir:/home/vmail/%s/%s/Maildir' % (domain, userName)
+                emailAcct.save()
+            else:
+                password = bcrypt.hashpw(str(password), bcrypt.gensalt())
+                password = '{CRYPT}%s' % (password)
+                emailAcct = EUsers(emailOwner=emailDomain, email=finalEmailUsername, password=password)
+                emailAcct.mail = 'maildir:/home/vmail/%s/%s/Maildir' % (domain, userName)
+                emailAcct.save()
 
             emailLimits = EmailLimits(email=emailAcct)
             emailLimits.save()
@@ -132,8 +182,14 @@ class mailUtilities:
     @staticmethod
     def changeEmailPassword(email, newPassword):
         try:
+            CentOSPath = '/etc/redhat-release'
             changePass = EUsers.objects.get(email=email)
-            changePass.password = newPassword
+            if os.path.exists(CentOSPath):
+                password = bcrypt.hashpw(str(newPassword), bcrypt.gensalt())
+                password = '{CRYPT}%s' % (password)
+                changePass.password = password
+            else:
+                changePass.password = newPassword
             changePass.save()
             return 0,'None'
         except BaseException, msg:
@@ -221,12 +277,7 @@ class mailUtilities:
             path = "/etc/opendkim.conf"
 
             command = "sudo cat " + path
-            res = subprocess.call(shlex.split(command))
-
-            if res == 1:
-                return 0
-            else:
-                return 1
+            return ProcessUtilities.executioner(command)
 
         except BaseException, msg:
             logging.CyberCPLogFileWriter.writeToFile(
@@ -315,12 +366,20 @@ milter_default_action = accept
             try:
                 FNULL = open(os.devnull, 'w')
 
-                command = "sudo mkdir " + mailUtilities.cyberPanelHome
-                subprocess.call(shlex.split(command), stdout=FNULL)
+                if getpass.getuser() == 'root':
+                    command = "sudo mkdir " + mailUtilities.cyberPanelHome
+                    subprocess.call(shlex.split(command), stdout=FNULL)
 
-                command = "sudo chown -R cyberpanel:cyberpanel " + mailUtilities.cyberPanelHome
-                subprocess.call(shlex.split(command), stdout=FNULL)
+                    command = "sudo chown -R cyberpanel:cyberpanel " + mailUtilities.cyberPanelHome
+                    subprocess.call(shlex.split(command), stdout=FNULL)
+                else:
+                    command = "sudo mkdir " + mailUtilities.cyberPanelHome
+                    ProcessUtilities.executioner(command)
+
+                    command = "sudo chown -R cyberpanel:cyberpanel " + mailUtilities.cyberPanelHome
+                    ProcessUtilities.executioner(command)
             except:
+                FNULL = open(os.devnull, 'w')
                 command = "sudo chown -R cyberpanel:cyberpanel " + mailUtilities.cyberPanelHome
                 subprocess.call(shlex.split(command), stdout=FNULL)
 
@@ -373,8 +432,6 @@ milter_default_action = accept
     def installSpamAssassin(install, SpamAssassin):
         try:
 
-            mailUtilities.checkHome()
-
             if ProcessUtilities.decideDistro() == ProcessUtilities.centos:
                 command = 'sudo yum install spamassassin -y'
             else:
@@ -410,9 +467,9 @@ milter_default_action = accept
             path = "/etc/mail/spamassassin/local.cf"
 
             command = "sudo cat " + path
-            res = subprocess.call(shlex.split(command))
+            output = ProcessUtilities.outputExecutioner(command)
 
-            if res == 1:
+            if output.find('No such') > -1:
                 return 0
             else:
                 return 1
@@ -426,22 +483,37 @@ milter_default_action = accept
     def configureSpamAssassin():
         try:
 
+            if ProcessUtilities.decideDistro() == ProcessUtilities.ubuntu:
+                confFile = "/etc/mail/spamassassin/local.cf"
+                confData = open(confFile).readlines()
+
+                conf = open(confFile, 'w')
+
+                for items in confData:
+                    if items.find('report_safe') > -1 or items.find('rewrite_header') > -1 or items.find('required_score') > -1 or items.find('required_hits') > -1:
+                        conf.write(items.strip('#').strip(' '))
+                    else:
+                        conf.write(items)
+
+                conf.close()
+
+
             command = "groupadd spamd"
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.normalExecutioner(command)
 
             command = "useradd -g spamd -s /bin/false -d /var/log/spamassassin spamd"
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.normalExecutioner(command)
 
             ##
 
             command = "chown spamd:spamd /var/log/spamassassin"
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.normalExecutioner(command)
 
             command = "systemctl enable spamassassin"
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.normalExecutioner(command)
 
             command = "systemctl start spamassassin"
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.normalExecutioner(command)
 
             ## Configuration to postfix
 
@@ -462,7 +534,7 @@ milter_default_action = accept
             writeToFile.close()
 
             command = 'systemctl restart postfix'
-            subprocess.call(shlex.split(command))
+            ProcessUtilities.normalExecutioner(command)
 
 
             print "1,None"
@@ -604,6 +676,10 @@ def main():
         mailUtilities.saveSpamAssassinConfigs(args.tempConfigPath)
     elif args.function == 'savePolicyServerStatus':
         mailUtilities.savePolicyServerStatus(args.install)
+    elif args.function == 'installSpamAssassin':
+        mailUtilities.installSpamAssassin("install", "SpamAssassin")
+    elif args.function == 'AfterEffects':
+        mailUtilities.AfterEffects(args.domain)
 
 if __name__ == "__main__":
     main()

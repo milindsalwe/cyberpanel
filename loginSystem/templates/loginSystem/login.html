@@ -67,7 +67,7 @@
         <div class="col-md-8 col-lg-6 clearfix center-margin">
             <div class="row">
                 <div class="col-md-5">
-                    <h3 class="text-transform-upr font-size-17">CyberPanel <span class="opacity-80">v 1.7</span></h3>
+                    <h3 class="text-transform-upr font-size-17">CyberPanel <span class="opacity-80">v 1.8</span></h3>
                     <p class="font-gray">Web Hosting Control Panel</p>
                     <div class="divider"></div>
                     <ul class="reset-ul">
@@ -113,7 +113,7 @@
                                 </div>
                                 <div class="form-group">
                                     <div class="input-group">
-                                        <input ng-model="password" type="password" class="form-control" id="password" placeholder="Password" required>
+                                        <input ng-keypress="initiateLogin($event)" ng-model="password" type="password" class="form-control" id="password" placeholder="Password" required>
                                         <span class="input-group-addon bg-blue">
                                             <i class="glyph-icon icon-unlock-alt"></i>
                                         </span>
@@ -126,6 +126,7 @@
                                         <select ng-model="languageSelection" class="form-control">
                                                 <option selected>English</option>
                                                 <option>Chinese</option>
+                                                <option>Italian</option>
                                                 <option>French</option>
                                                 <option>Bulgarian</option>
                                                 <option>Portuguese</option>

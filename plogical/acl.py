@@ -13,6 +13,7 @@ import json
 from subprocess import call, CalledProcessError
 from shlex import split
 from CyberCPLogFileWriter import CyberCPLogFileWriter as logging
+from dockerManager.models import Containers
 
 class ACLManager:
 
@@ -33,7 +34,7 @@ class ACLManager:
             serverIPAddress = "192.168.100.1"
 
         finalResponse['serverIPAddress'] = serverIPAddress
-        finalResponse['adminName'] = admin.firstName + " " + admin.lastName[:3]
+        finalResponse['adminName'] = admin.firstName
 
         if admin.acl.adminStatus == 1:
             finalResponse['admin'] = 1
@@ -46,6 +47,7 @@ class ACLManager:
             ## User Management
 
             finalResponse['createNewUser'] = acl.createNewUser
+            finalResponse['listUsers'] = acl.listUsers
             finalResponse['deleteUser'] = acl.deleteUser
             finalResponse['changeUserACL'] = acl.changeUserACL
             finalResponse['resellerCenter'] = acl.resellerCenter
@@ -61,6 +63,7 @@ class ACLManager:
 
 
             finalResponse['createPackage'] = acl.createPackage
+            finalResponse['listPackages'] = acl.listPackages
             finalResponse['deletePackage'] = acl.deletePackage
             finalResponse['modifyPackage'] = acl.modifyPackage
 
@@ -80,6 +83,7 @@ class ACLManager:
             ## Email Management
 
             finalResponse['createEmail'] = acl.createEmail
+            finalResponse['listEmails'] = acl.listEmails
             finalResponse['deleteEmail'] = acl.deleteEmail
             finalResponse['emailForwarding'] = acl.emailForwarding
             finalResponse['changeEmailPassword'] = acl.changeEmailPassword
@@ -106,6 +110,17 @@ class ACLManager:
             finalResponse['mailServerSSL'] = acl.mailServerSSL
 
         return finalResponse
+
+    @staticmethod
+    def checkUserOwnerShip(currentACL, owner, user):
+        if currentACL['admin'] == 1:
+            return 1
+        elif owner == user:
+            return 1
+        elif owner.pk == user.owner:
+            return 1
+        else:
+            return 0
 
     @staticmethod
     def currentContextPermission(currentACL, context):
@@ -249,6 +264,22 @@ class ACLManager:
         return adminObjects
 
     @staticmethod
+    def fetchTableUserObjects(userID):
+        admin = Administrator.objects.get(pk=userID)
+        adminObjects = []
+
+        finalResponse = ACLManager.loadedACL(userID)
+
+        if finalResponse['admin'] == 1:
+            return Administrator.objects.all().exclude(pk=userID)
+        else:
+            admins = Administrator.objects.filter(owner=admin.pk)
+            for items in admins:
+                adminObjects.append(items)
+
+        return adminObjects
+
+    @staticmethod
     def loadDeletionUsers(userID, finalResponse):
         admin = Administrator.objects.get(pk=userID)
         adminNames = []
@@ -364,8 +395,29 @@ class ACLManager:
         return websiteNames
 
     @staticmethod
-    def findWebsiteObjects(currentACL, userID):
+    def searchWebsiteObjects(currentACL, userID, searchTerm):
+        if currentACL['admin'] == 1:
+            return Websites.objects.filter(domain__istartswith=searchTerm)
+        else:
+            websiteList = []
+            admin = Administrator.objects.get(pk=userID)
 
+            websites = admin.websites_set.filter(domain__istartswith=searchTerm)
+
+            for items in websites:
+                websiteList.append(items)
+
+            admins = Administrator.objects.filter(owner=admin.pk)
+
+            for items in admins:
+                webs = items.websites_set.filter(domain__istartswith=searchTerm)
+                for web in webs:
+                    websiteList.append(web)
+
+            return websiteList
+
+    @staticmethod
+    def findWebsiteObjects(currentACL, userID):
         if currentACL['admin'] == 1:
             return Websites.objects.all()
         else:
@@ -439,6 +491,19 @@ class ACLManager:
                     return 0
 
     @staticmethod
+    def checkOwnershipZone(domain, admin, currentACL):
+        domain = Domains.objects.get(name=domain)
+
+        if currentACL['admin'] == 1:
+            return 1
+        elif domain.admin == admin:
+            return 1
+        elif domain.admin.owner == admin.pk:
+            return 1
+        else:
+            return 0
+
+    @staticmethod
     def executeCall(command):
         try:
             result = call(split(command))
@@ -450,6 +515,81 @@ class ACLManager:
             logging.writeToFile(str(msg) + ' [ACLManager.executeCall]')
             return 0, str(msg)
 
+    @staticmethod
+    def checkContainerOwnership(name, userID):
+        try:
+            container = Containers.objects.get(name=name)
+            currentACL = ACLManager.loadedACL(userID)
+            admin = Administrator.objects.get(pk=userID)
+
+            if currentACL['admin'] == 1:
+                return 1
+            elif container.admin == admin:
+                return 1
+            else:
+                return 0
+        except:
+            return 0
+
+    @staticmethod
+    def findAllContainers(currentACL, userID):
+        containerName = []
+
+        if currentACL['admin'] == 1:
+            allContainers = Containers.objects.all()
+            for items in allContainers:
+                containerName.append(items.name)
+        else:
+            admin = Administrator.objects.get(pk=userID)
+
+            containers = admin.containers_set.all()
+            admins = Administrator.objects.filter(owner=admin.pk)
+
+            for items in containers:
+                containerName.append(items.name)
+
+            for items in admins:
+                cons = items.containers_set.all()
+                for con in cons:
+                    containerName.append(con.name)
+
+
+        return containerName
+
+    @staticmethod
+    def findContainersObjects(currentACL, userID):
+
+        if currentACL['admin'] == 1:
+            return Containers.objects.all()
+        else:
+
+            containerList = []
+            admin = Administrator.objects.get(pk=userID)
+
+            containers = admin.containers_set.all()
+
+            for items in containers:
+                containerList.append(items)
+
+            admins = Administrator.objects.filter(owner=admin.pk)
+
+            for items in admins:
+                cons = items.containers_set.all()
+                for con in cons:
+                    containerList.append(con)
+
+            return containerList
+
+    @staticmethod
+    def findChildDomains(websiteNames):
+        childDomains = []
+
+        for items in websiteNames:
+            website = Websites.objects.get(domain = items)
+            for childDomain in website.childdomains_set.all():
+                childDomains.append(childDomain.domain)
+
+        return childDomains
 
 
 

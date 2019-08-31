@@ -12,7 +12,7 @@ import socket, smtplib
 import DNS
 from random import randint
 import subprocess, shlex
-
+from plogical.processUtilities import ProcessUtilities
 
 class emailMarketing(multi.Thread):
     def __init__(self, function, extraArgs):
@@ -154,8 +154,8 @@ class emailMarketing(multi.Thread):
                     smtpServer = smtplib.SMTP('127.0.0.1')
                 else:
                     verifyHost = SMTPHosts.objects.get(host=self.extraArgs['host'])
-                    smtpServer = smtplib.SMTP(verifyHost.host, int(verifyHost.port))
-                    smtpServer.login(verifyHost.userName, verifyHost.password)
+                    smtpServer = smtplib.SMTP(str(verifyHost.host), int(verifyHost.port))
+                    smtpServer.login(str(verifyHost.userName), str(verifyHost.password))
             except smtplib.SMTPHeloError:
                 logging.CyberCPLogFileWriter.statusWriter(self.extraArgs['tempStatusPath'],
                                                           'The server didnt reply properly to the HELO greeting.')
@@ -212,7 +212,7 @@ class emailMarketing(multi.Thread):
                                 messageFile.close()
 
                                 command = "sudo sed -i 's/{{ unsubscribeCheck }}/" + removalLink + "/g' " + tempPath
-                                subprocess.call(shlex.split(command))
+                                ProcessUtilities.executioner(command, 'cyberpanel')
 
                                 messageFile = open(tempPath, 'r')
                                 finalMessage = messageFile.read()

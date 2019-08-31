@@ -4,7 +4,10 @@ from __future__ import unicode_literals
 from cloudManager import CloudManager
 import json
 from loginSystem.models import Administrator
+from plogical.CyberCPLogFileWriter import CyberCPLogFileWriter as logging
+from django.views.decorators.csrf import csrf_exempt
 
+@csrf_exempt
 def router(request):
     try:
         data = json.loads(request.body)
@@ -13,7 +16,11 @@ def router(request):
         serverUserName = data['serverUserName']
         admin = Administrator.objects.get(userName=serverUserName)
 
+
         cm = CloudManager(data, admin)
+
+        if admin.api == 0:
+            return cm.ajaxPre(0, 'API Access Disabled.')
 
         if controller == 'statusFunc':
             pass
@@ -197,6 +204,106 @@ def router(request):
             return cm.fetchBackupLogs(request)
         elif controller == 'forceRunAWSBackup':
             return cm.forceRunAWSBackup(request)
+        elif controller == 'systemStatus':
+            return cm.systemStatus(request)
+        elif controller == 'killProcess':
+            return cm.killProcess(request)
+        elif controller == 'connectAccountDO':
+            return cm.connectAccountDO(request)
+        elif controller == 'fetchBucketsDO':
+            return cm.fetchBucketsDO(request)
+        elif controller == 'createPlanDO':
+            return cm.createPlanDO(request)
+        elif controller == 'fetchBackupPlansDO':
+            return cm.fetchBackupPlansDO(request)
+        elif controller == 'deletePlanDO':
+            return cm.deletePlanDO(request)
+        elif controller == 'fetchWebsitesInPlanDO':
+            return cm.fetchWebsitesInPlanDO(request)
+        elif controller == 'fetchBackupLogsDO':
+            return cm.fetchBackupLogsDO(request)
+        elif controller == 'deleteDomainFromPlanDO':
+            return cm.deleteDomainFromPlanDO(request)
+        elif controller == 'savePlanChangesDO':
+            return cm.savePlanChangesDO(request)
+        elif controller == 'forceRunAWSBackupDO':
+            return cm.forceRunAWSBackupDO(request)
+        elif controller == 'showStatus':
+            return cm.showStatus(request)
+        elif controller == 'fetchRam':
+            return cm.fetchRam(request)
+        elif controller == 'applyMySQLChanges':
+            return cm.applyMySQLChanges(request)
+        elif controller == 'restartMySQL':
+            return cm.restartMySQL(request)
+        elif controller == 'fetchDatabasesMYSQL':
+            return cm.fetchDatabasesMYSQL(request)
+        elif controller == 'fetchTables':
+            return cm.fetchTables(request)
+        elif controller == 'deleteTable':
+            return cm.deleteTable(request)
+        elif controller == 'fetchTableData':
+            return cm.fetchTableData(request)
+        elif controller == 'fetchStructure':
+            return cm.fetchStructure(request)
+        elif controller == 'addMINIONode':
+            return cm.addMINIONode(request)
+        elif controller == 'fetchMINIONodes':
+            return cm.fetchMINIONodes(request)
+        elif controller == 'deleteMINIONode':
+            return cm.deleteMINIONode(request)
+        elif controller == 'createPlanMINIO':
+            return cm.createPlanMINIO(request)
+        elif controller == 'fetchBackupPlansMINIO':
+            return cm.fetchBackupPlansMINIO(request)
+        elif controller == 'deletePlanMINIO':
+            return cm.deletePlanMINIO(request)
+        elif controller == 'savePlanChangesMINIO':
+            return cm.savePlanChangesMINIO(request)
+        elif controller == 'forceRunAWSBackupMINIO':
+            return cm.forceRunAWSBackupMINIO(request)
+        elif controller == 'fetchWebsitesInPlanMINIO':
+            return cm.fetchWebsitesInPlanMINIO(request)
+        elif controller == 'fetchBackupLogsMINIO':
+            return cm.fetchBackupLogsMINIO(request)
+        elif controller == 'deleteDomainFromPlanMINIO':
+            return cm.deleteDomainFromPlanMINIO(request)
+        elif controller == 'submitWebsiteStatus':
+            return cm.submitWebsiteStatus(request)
+        elif controller == 'submitChangePHP':
+            return cm.submitChangePHP(request)
+        elif controller == 'getSwitchStatus':
+            return cm.getSwitchStatus(request)
+        elif controller == 'switchServer':
+            return cm.switchServer(request)
+        elif controller == 'tuneSettings':
+            return cm.tuneSettings(request)
+        elif controller == 'getCurrentPHPConfig':
+            return cm.getCurrentPHPConfig(request)
+        elif controller == 'savePHPConfigBasic':
+            return cm.savePHPConfigBasic(request)
+        elif controller == 'fetchPHPSettingsAdvance':
+            return cm.fetchPHPSettingsAdvance(request)
+        elif controller == 'savePHPConfigAdvance':
+            return cm.savePHPConfigAdvance(request)
+        elif controller == 'fetchPHPExtensions':
+            return cm.fetchPHPExtensions(request)
+        elif controller == 'submitExtensionRequest':
+            return cm.submitExtensionRequest(request)
+        elif controller == 'getRequestStatus':
+            return cm.getRequestStatus(request)
+        elif controller == 'getContainerizationStatus':
+            return cm.getContainerizationStatus(request)
+        elif controller == 'submitContainerInstall':
+            return cm.submitContainerInstall(request)
+        elif controller == 'switchTOLSWSStatus':
+            return cm.switchTOLSWSStatus(request)
+        elif controller == 'fetchWebsiteLimits':
+            return cm.fetchWebsiteLimits(request)
+        elif controller == 'saveWebsiteLimits':
+            return cm.saveWebsiteLimits(request)
+        elif controller == 'getUsageData':
+            return cm.getUsageData(request)
         else:
             return cm.ajaxPre(0, 'This function is not available in your version of CyberPanel.')
 

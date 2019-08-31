@@ -5,21 +5,29 @@ import sys
 import django
 sys.path.append('/usr/local/CyberCP')
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "CyberCP.settings")
-django.setup()
+try:
+    django.setup()
+except:
+    pass
 import shutil
 import installUtilities
-from websiteFunctions.models import Websites, ChildDomains, aliasDomains
+
 import subprocess
 import shlex
 import CyberCPLogFileWriter as logging
-from databases.models import Databases
+
 from mysqlUtilities import mysqlUtilities
 from dnsUtilities import DNS
 from random import randint
 from processUtilities import ProcessUtilities
 from managePHP.phpManager import PHPManager
-
-
+from vhostConfs import vhostConfs
+from ApachController.ApacheVhosts import ApacheVhost
+try:
+    from websiteFunctions.models import Websites, ChildDomains, aliasDomains
+    from databases.models import Databases
+except:
+    pass
 ## If you want justice, you have come to the wrong place.
 
 
@@ -95,15 +103,20 @@ class vhost:
             try:
                 os.makedirs(pathLogs)
 
-                command = "chown " + "lscpd" + ":" + "lscpd" + " " + pathLogs
+                if ProcessUtilities.decideDistro() == ProcessUtilities.centos:
+                    groupName = 'nobody'
+                else:
+                    groupName = 'nogroup'
+
+                command = "chown %s:%s %s" % ('root', groupName, pathLogs)
                 cmd = shlex.split(command)
                 subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
 
 
                 if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
-                    command = "chmod -R 666 " + pathLogs
+                    command = "chmod -R 750 " + pathLogs
                 else:
-                    command = "chmod -R 755 " + pathLogs
+                    command = "chmod -R 750 " + pathLogs
 
                 cmd = shlex.split(command)
                 subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
@@ -126,6 +139,10 @@ class vhost:
                 file = open(completePathToConfigFile, "w+")
 
                 command = "chown " + "lsadm" + ":" + "lsadm" + " " + completePathToConfigFile
+                cmd = shlex.split(command)
+                subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+
+                command = 'chmod 600 %s' % (completePathToConfigFile)
                 cmd = shlex.split(command)
                 subprocess.call(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
 
@@ -197,192 +214,22 @@ class vhost:
             try:
                 confFile = open(vhFile, "w+")
 
-                docRoot = "docRoot                   $VH_ROOT/public_html" + "\n"
-                vhDomain = "vhDomain                  $VH_NAME" + "\n"
-                vhAliases = "vhAliases                 www.$VH_NAME"+ "\n"
-                adminEmails = "adminEmails               " + administratorEmail + "\n"
-                enableGzip = "enableGzip                1" + "\n"
-                enableIpGeo = "enableIpGeo               1" + "\n" + "\n"
-
-                confFile.writelines(docRoot)
-                confFile.writelines(vhDomain)
-                confFile.writelines(vhAliases)
-                confFile.writelines(adminEmails)
-                confFile.writelines(enableGzip)
-                confFile.writelines(enableIpGeo)
-
-                # Index file settings
-
-                index = "index  {" + "\n"
-                userServer = "  useServer               0" + "\n"
-                indexFiles = "  indexFiles              index.php, index.html" + "\n"
-                index_end = "}" + "\n" + "\n"
-
-                confFile.writelines(index)
-                confFile.writelines(userServer)
-                confFile.writelines(indexFiles)
-                confFile.writelines(index_end)
-
-                # Error Log Settings
-
-
-                error_log = "errorlog $VH_ROOT/logs/$VH_NAME.error_log {" + "\n"
-                useServer = "  useServer               0" + "\n"
-                logLevel = "  logLevel                ERROR" + "\n"
-                rollingSize = "  rollingSize             10M" + "\n"
-                error_log_end = "}" + "\n" + "\n"
-
-                confFile.writelines(error_log)
-                confFile.writelines(useServer)
-                confFile.writelines(logLevel)
-                confFile.writelines(rollingSize)
-                confFile.writelines(error_log_end)
-
-                # Access Log Settings
-
-                access_Log = "accesslog $VH_ROOT/logs/$VH_NAME.access_log {" + "\n"
-                useServer = "  useServer               0" + "\n"
-                logFormat = '  logFormat               "%v %h %l %u %t \"%r\" %>s %b"' + "\n"
-                logHeaders = "  logHeaders              5" + "\n"
-                rollingSize = "  rollingSize             10M" + "\n"
-                keepDays = "  keepDays                10"
-                compressArchive = "  compressArchive         1" + "\n"
-                access_Log_end = "}" + "\n" + "\n"
-
-                confFile.writelines(access_Log)
-                confFile.writelines(useServer)
-                confFile.writelines(logFormat)
-                confFile.writelines(logHeaders)
-                confFile.writelines(rollingSize)
-                confFile.writelines(keepDays)
-                confFile.writelines(compressArchive)
-                confFile.writelines(access_Log_end)
-
-                # php settings
-
-                scripthandler = "scripthandler  {" + "\n"
-                add = "  add                     lsapi:"+virtualHostUser+" php" + "\n"
-                php_end = "}" + "\n" + "\n"
-
-                confFile.writelines(scripthandler)
-                confFile.writelines(add)
-                confFile.writelines(php_end)
-
-
-                ## external app
-
                 php = PHPManager.getPHPString(phpVersion)
 
-                extprocessor = "extprocessor "+virtualHostUser+" {\n"
-                type = "  type                    lsapi\n"
-                address = "  address                 UDS://tmp/lshttpd/"+virtualHostUser+".sock\n"
-                maxConns = "  maxConns                10\n"
-                env = "  env                     LSAPI_CHILDREN=10\n"
-                initTimeout = "  initTimeout             600\n"
-                retryTimeout = "  retryTimeout            0\n"
-                persistConn = "  persistConn             1\n"
-                persistConnTimeout = "  pcKeepAliveTimeout      1\n"
-                respBuffer = "  respBuffer              0\n"
-                autoStart = "  autoStart               1\n"
-                path = "  path                    /usr/local/lsws/lsphp"+php+"/bin/lsphp\n"
-                extUser = "  extUser                 " + virtualHostUser + "\n"
-                extGroup = "  extGroup                 " + virtualHostUser + "\n"
-                memSoftLimit = "  memSoftLimit            2047M\n"
-                memHardLimit = "  memHardLimit            2047M\n"
-                procSoftLimit = "  procSoftLimit           400\n"
-                procHardLimit = "  procHardLimit           500\n"
-                extprocessorEnd = "}\n"
+                currentConf = vhostConfs.olsMasterConf
+                currentConf = currentConf.replace('{adminEmails}', administratorEmail)
+                currentConf = currentConf.replace('{virtualHostUser}', virtualHostUser)
+                currentConf = currentConf.replace('{php}', php)
+                currentConf = currentConf.replace('{adminEmails}', administratorEmail)
+                currentConf = currentConf.replace('{php}', php)
 
-                confFile.writelines(extprocessor)
-                confFile.writelines(type)
-                confFile.writelines(address)
-                confFile.writelines(maxConns)
-                confFile.writelines(env)
-                confFile.writelines(initTimeout)
-                confFile.writelines(retryTimeout)
-                confFile.writelines(persistConn)
-                confFile.writelines(persistConnTimeout)
-                confFile.writelines(respBuffer)
-                confFile.writelines(autoStart)
-                confFile.writelines(path)
-                confFile.writelines(extUser)
-                confFile.writelines(extGroup)
-                confFile.writelines(memSoftLimit)
-                confFile.writelines(memHardLimit)
-                confFile.writelines(procSoftLimit)
-                confFile.writelines(procHardLimit)
-                confFile.writelines(extprocessorEnd)
-
-                ## File Manager defination
-
-                context = "context /.filemanager {\n"
-                location = "  location                /usr/local/lsws/Example/html/FileManager\n"
-                allowBrowse = "  allowBrowse             1\n"
-                autoIndex = "  autoIndex               1\n\n"
-
-                accessControl = "  accessControl  {\n"
-                allow = "    allow                 127.0.0.1, localhost\n"
-                deny = "    deny                  0.0.0.0/0\n"
-                accessControlEnds = "  }\n"
-
-                rewriteInherit = """  rewrite  {
-        enable               0
-    
-      }
-      """
-
-                phpIniOverride = "phpIniOverride  {\n"
-                php_admin_value = 'php_admin_value open_basedir "/tmp:/usr/local/lsws/Example/html/FileManager:$VH_ROOT"\n'
-                php_value = 'php_value display_errors "Off"\n'
-                php_value_upload_max_size = 'php_value upload_max_filesize "200M"\n'
-                php_value_post_max_size = 'php_value post_max_size "250M"\n'
-                endPHPIniOverride = "}\n"
-
-
-                defaultCharSet = "  addDefaultCharset       off\n"
-                contextEnds = "}\n"
-
-                confFile.writelines(context)
-                confFile.writelines(location)
-                confFile.writelines(allowBrowse)
-                confFile.writelines(autoIndex)
-                confFile.writelines(accessControl)
-                confFile.writelines(allow)
-                confFile.writelines(deny)
-                confFile.writelines(accessControlEnds)
-                confFile.write(rewriteInherit)
-
-                confFile.writelines(phpIniOverride)
                 if openBasedir == 1:
-                    confFile.writelines(php_admin_value)
-                confFile.write(php_value)
-                confFile.write(php_value_upload_max_size)
-                confFile.write(php_value_post_max_size)
-                confFile.writelines(endPHPIniOverride)
-
-                confFile.writelines(defaultCharSet)
-                confFile.writelines(contextEnds)
-
-                ## OpenBase Dir Protection
-
-                phpIniOverride = "phpIniOverride  {\n"
-                php_admin_value = 'php_admin_value open_basedir "/tmp:$VH_ROOT"\n'
-                endPHPIniOverride = "}\n"
-
-                confFile.writelines(phpIniOverride)
-                if openBasedir == 1:
-                    confFile.writelines(php_admin_value)
-                confFile.writelines(endPHPIniOverride)
+                    currentConf = currentConf.replace('{open_basedir}', 'php_admin_value open_basedir "/tmp:$VH_ROOT"')
+                else:
+                    currentConf = currentConf.replace('{open_basedir}', '')
 
 
-                htaccessAutoLoad = """
-    rewrite  {
-      enable                  1
-      autoLoadHtaccess        1
-    }
-    """
-                confFile.write(htaccessAutoLoad)
-
+                confFile.write(currentConf)
                 confFile.close()
 
             except BaseException, msg:
@@ -393,45 +240,16 @@ class vhost:
         else:
             try:
                 confFile = open(vhFile, "w+")
-
-                doNotModify = '# Do not modify this file, this is auto-generated file.\n\n'
-
-                VirtualHost = '<VirtualHost *:80>\n\n'
-                ServerName = '    ServerName ' + virtualHostName + '\n'
-                ServerAlias = '    ServerAlias www.' + virtualHostName + '\n'
-                ScriptAlias = '    Alias /.filemanager/ /usr/local/lsws/FileManager\n'
-                ServerAdmin = '    ServerAdmin ' + administratorEmail + '\n'
-                SeexecUserGroup = '    SuexecUserGroup ' + virtualHostUser + ' ' + virtualHostUser + '\n'
-                DocumentRoot = '    DocumentRoot /home/' + virtualHostName + '/public_html\n'
-                CustomLogCombined = '    CustomLog /home/' + virtualHostName + '/logs/' + virtualHostName + '.access_log combined\n'
-
-                confFile.writelines(doNotModify)
-                confFile.writelines(VirtualHost)
-                confFile.writelines(ServerName)
-                confFile.writelines(ServerAlias)
-                confFile.writelines(ScriptAlias)
-                confFile.writelines(ServerAdmin)
-                confFile.writelines(SeexecUserGroup)
-                confFile.writelines(DocumentRoot)
-                confFile.writelines(CustomLogCombined)
-
-                DirectoryFileManager = """\n    <Directory /usr/local/lsws/FileManager>
-                            Options +Includes -Indexes +ExecCGI
-                            php_value display_errors "Off"
-                            php_value upload_max_filesize "200M"
-                            php_value post_max_size "250M"
-                        </Directory>\n"""
-                confFile.writelines(DirectoryFileManager)
-
-                ## external app
-
                 php = PHPManager.getPHPString(phpVersion)
 
-                AddType = '    AddHandler application/x-httpd-php' + php + ' .php .php7 .phtml\n\n'
-                VirtualHostEnd = '</VirtualHost>\n'
+                currentConf = vhostConfs.lswsMasterConf
 
-                confFile.writelines(AddType)
-                confFile.writelines(VirtualHostEnd)
+                currentConf = currentConf.replace('{virtualHostName}', virtualHostName)
+                currentConf = currentConf.replace('{administratorEmail}', administratorEmail)
+                currentConf = currentConf.replace('{externalApp}', virtualHostUser)
+                currentConf = currentConf.replace('{php}', php)
+
+                confFile.write(currentConf)
 
                 confFile.close()
             except BaseException, msg:
@@ -439,7 +257,6 @@ class vhost:
                     str(msg) + " [IO Error with per host config file [perHostVirtualConf]]")
                 return 0
             return 1
-
 
     @staticmethod
     def createNONSSLMapEntry(virtualHostName):
@@ -466,15 +283,6 @@ class vhost:
 
     @staticmethod
     def createConfigInMainVirtualHostFile(virtualHostName):
-
-        #virtualhost project.cyberpersons.com {
-        #vhRoot / home / project.cyberpersons.com
-        #configFile      $SERVER_ROOT / conf / vhosts /$VH_NAME / vhconf.conf
-        #allowSymbolLink 1
-        #enableScript 1
-        #restrained 1
-        #}
-
         if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
             try:
 
@@ -483,19 +291,12 @@ class vhost:
 
                 writeDataToFile = open("/usr/local/lsws/conf/httpd_config.conf", 'a')
 
-                writeDataToFile.writelines("virtualHost " + virtualHostName + " {\n")
-                writeDataToFile.writelines("  vhRoot                  /home/$VH_NAME\n")
-                writeDataToFile.writelines("  configFile              $SERVER_ROOT/conf/vhosts/$VH_NAME/vhost.conf\n")
-                writeDataToFile.writelines("  allowSymbolLink         1\n")
-                writeDataToFile.writelines("  enableScript            1\n")
-                writeDataToFile.writelines("  restrained              1\n")
-                writeDataToFile.writelines("}\n")
-                writeDataToFile.writelines("\n")
+                currentConf = vhostConfs.olsMasterMainConf
+                currentConf = currentConf.replace('{virtualHostName}', virtualHostName)
+                writeDataToFile.write(currentConf)
 
                 writeDataToFile.close()
 
-
-                writeDataToFile.close()
                 return [1,"None"]
             except BaseException,msg:
                 logging.CyberCPLogFileWriter.writeToFile(str(msg) + "223 [IO Error with main config file [createConfigInMainVirtualHostFile]]")
@@ -633,6 +434,11 @@ class vhost:
                             writeDataToFile.writelines(items)
                         if (items.find("}") > -1 and check == 0):
                             check = 1
+
+                ## Delete Apache Conf
+
+                ApacheVhost.DeleteApacheVhost(virtualHostName)
+
             except BaseException, msg:
                 logging.CyberCPLogFileWriter.writeToFile(
                     str(msg) + " [Not able to remove virtual host configuration from main configuration file.]")
@@ -682,36 +488,49 @@ class vhost:
     def changePHP(vhFile, phpVersion):
         if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
             try:
-                data = open(vhFile, "r").readlines()
+                if ApacheVhost.changePHP(phpVersion, vhFile) == 0:
+                    data = open(vhFile, "r").readlines()
 
-                php = PHPManager.getPHPString(phpVersion)
+                    php = PHPManager.getPHPString(phpVersion)
 
-                writeDataToFile = open(vhFile, "w")
+                    if not os.path.exists("/usr/local/lsws/lsphp" + str(php) + "/bin/lsphp"):
+                        print 0, 'This PHP version is not available on your CyberPanel.'
+                        return [0, "[This PHP version is not available on your CyberPanel. [changePHP]"]
 
-                path = "  path                    /usr/local/lsws/lsphp" + str(php) + "/bin/lsphp\n"
+                    writeDataToFile = open(vhFile, "w")
 
-                for items in data:
-                    if items.find("/usr/local/lsws/lsphp") > -1 and items.find("path") > -1:
-                        writeDataToFile.writelines(path)
-                    else:
-                        writeDataToFile.writelines(items)
+                    path = "  path                    /usr/local/lsws/lsphp" + str(php) + "/bin/lsphp\n"
 
-                writeDataToFile.close()
+                    for items in data:
+                        if items.find("/usr/local/lsws/lsphp") > -1 and items.find("path") > -1:
+                            writeDataToFile.writelines(path)
+                        else:
+                            writeDataToFile.writelines(items)
 
-                installUtilities.installUtilities.reStartLiteSpeed()
+                    writeDataToFile.close()
+
+                    installUtilities.installUtilities.reStartLiteSpeed()
+                else:
+                    php = PHPManager.getPHPString(phpVersion)
+                    command = "systemctl restart php%s-php-fpm" % (php)
+                    ProcessUtilities.normalExecutioner(command)
 
                 print "1,None"
                 return 1,'None'
             except BaseException, msg:
                 logging.CyberCPLogFileWriter.writeToFile(
-                    str(msg) + " [IO Error with per host config file [changePHP]]")
+                    str(msg) + " [IO Error with per host config file [changePHP]")
                 print 0,str(msg)
-                return [0, str(msg) + " [IO Error with per host config file [changePHP]]"]
+                return [0, str(msg) + " [IO Error with per host config file [changePHP]"]
         else:
             try:
                 data = open(vhFile, "r").readlines()
 
                 php = PHPManager.getPHPString(phpVersion)
+
+                if not os.path.exists("/usr/local/lsws/lsphp" + str(php) + "/bin/lsphp"):
+                    print 0, 'This PHP version is not available on your CyberPanel.'
+                    return [0, "[This PHP version is not available on your CyberPanel. [changePHP]"]
 
                 writeDataToFile = open(vhFile, "w")
 
@@ -928,151 +747,35 @@ class vhost:
                                    administratorEmail, phpVersion, virtualHostUser, openBasedir) == 1:
             return [1, "None"]
         else:
-            return [0, "[359 Not able to create per host virtual configurations [perHostVirtualConf]"]
+            return [0, "[359 Not able to create per host virtual configurations [createDirectoryForDomain]"]
 
     @staticmethod
     def perHostDomainConf(path, masterDomain, domain, vhFile, administratorEmail, phpVersion, virtualHostUser, openBasedir):
         if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
             try:
-                confFile = open(vhFile, "w+")
-
-                docRoot = "docRoot                   " + path + "\n"
-                vhDomain = "vhDomain                  $VH_NAME" + "\n"
-                vhAliases = "vhAliases                 www.$VH_NAME" + "\n"
-                adminEmails = "adminEmails               " + administratorEmail + "\n"
-                enableGzip = "enableGzip                1" + "\n"
-                enableIpGeo = "enableIpGeo               1" + "\n" + "\n"
-
-                confFile.writelines(docRoot)
-                confFile.writelines(vhDomain)
-                confFile.writelines(vhAliases)
-                confFile.writelines(adminEmails)
-                confFile.writelines(enableGzip)
-                confFile.writelines(enableIpGeo)
-
-                # Index file settings
-
-                index = "index  {" + "\n"
-                userServer = "  useServer               0" + "\n"
-                indexFiles = "  indexFiles              index.php, index.html" + "\n"
-                index_end = "}" + "\n" + "\n"
-
-                confFile.writelines(index)
-                confFile.writelines(userServer)
-                confFile.writelines(indexFiles)
-                confFile.writelines(index_end)
-
-                # Error Log Settings
-
-
-                error_log = "errorlog $VH_ROOT/logs/" + masterDomain + ".error_log {" + "\n"
-                useServer = "  useServer               0" + "\n"
-                logLevel = "  logLevel                ERROR" + "\n"
-                rollingSize = "  rollingSize             10M" + "\n"
-                error_log_end = "}" + "\n" + "\n"
-
-                confFile.writelines(error_log)
-                confFile.writelines(useServer)
-                confFile.writelines(logLevel)
-                confFile.writelines(rollingSize)
-                confFile.writelines(error_log_end)
-
-                # Access Log Settings
-
-                access_Log = "accesslog $VH_ROOT/logs/" + masterDomain + ".access_log {" + "\n"
-                useServer = "  useServer               0" + "\n"
-                logFormat = '  logFormat               "%v %h %l %u %t \"%r\" %>s %b"' + "\n"
-                logHeaders = "  logHeaders              5" + "\n"
-                rollingSize = "  rollingSize             10M" + "\n"
-                keepDays = "  keepDays                10"
-                compressArchive = "  compressArchive         1" + "\n"
-                access_Log_end = "}" + "\n" + "\n"
-
-                confFile.writelines(access_Log)
-                confFile.writelines(useServer)
-                confFile.writelines(logFormat)
-                confFile.writelines(logHeaders)
-                confFile.writelines(rollingSize)
-                confFile.writelines(keepDays)
-                confFile.writelines(compressArchive)
-                confFile.writelines(access_Log_end)
-
-                ## OpenBase Dir Protection
-
-                phpIniOverride = "phpIniOverride  {\n"
-                php_admin_value = 'php_admin_value open_basedir "/tmp:/usr/local/lsws/Example/html/FileManager:$VH_ROOT"\n'
-                endPHPIniOverride = "}\n"
-
-                confFile.writelines(phpIniOverride)
-                if openBasedir == 1:
-                    confFile.writelines(php_admin_value)
-                confFile.writelines(endPHPIniOverride)
-
-                # php settings
-
-                sockRandomPath = str(randint(1000, 9999))
-
-                scripthandler = "scripthandler  {" + "\n"
-                add = "  add                     lsapi:" + virtualHostUser + sockRandomPath + " php" + "\n"
-                php_end = "}" + "\n" + "\n"
-
-                confFile.writelines(scripthandler)
-                confFile.writelines(add)
-                confFile.writelines(php_end)
-
-                ## external app
-
                 php = PHPManager.getPHPString(phpVersion)
+                externalApp = virtualHostUser + str(randint(1000, 9999))
 
-                extprocessor = "extprocessor " + virtualHostUser + sockRandomPath + " {\n"
-                type = "  type                    lsapi\n"
-                address = "  address                 UDS://tmp/lshttpd/" + virtualHostUser + sockRandomPath + ".sock\n"
-                maxConns = "  maxConns                10\n"
-                env = "  env                     LSAPI_CHILDREN=10\n"
-                initTimeout = "  initTimeout             60\n"
-                retryTimeout = "  retryTimeout            0\n"
-                persistConn = "  persistConn             1\n"
-                persistConnTimeout = "  pcKeepAliveTimeout      1\n"
-                respBuffer = "  respBuffer              0\n"
-                autoStart = "  autoStart               1\n"
-                path = "  path                    /usr/local/lsws/lsphp" + php + "/bin/lsphp\n"
-                extUser = "  extUser                 " + virtualHostUser + "\n"
-                extGroup = "  extGroup                 " + virtualHostUser + "\n"
-                memSoftLimit = "  memSoftLimit            2047M\n"
-                memHardLimit = "  memHardLimit            2047M\n"
-                procSoftLimit = "  procSoftLimit           400\n"
-                procHardLimit = "  procHardLimit           500\n"
-                extprocessorEnd = "}\n"
+                currentConf = vhostConfs.olsChildConf
+                currentConf = currentConf.replace('{path}', path)
+                currentConf = currentConf.replace('{masterDomain}', masterDomain)
+                currentConf = currentConf.replace('{adminEmails}', administratorEmail)
+                currentConf = currentConf.replace('{externalApp}', externalApp)
+                currentConf = currentConf.replace('{externalAppMaster}', virtualHostUser)
+                currentConf = currentConf.replace('{php}', php)
+                currentConf = currentConf.replace('{adminEmails}', administratorEmail)
+                currentConf = currentConf.replace('{php}', php)
 
-                confFile.writelines(extprocessor)
-                confFile.writelines(type)
-                confFile.writelines(address)
-                confFile.writelines(maxConns)
-                confFile.writelines(env)
-                confFile.writelines(initTimeout)
-                confFile.writelines(retryTimeout)
-                confFile.writelines(persistConn)
-                confFile.writelines(persistConnTimeout)
-                confFile.writelines(respBuffer)
-                confFile.writelines(autoStart)
-                confFile.writelines(path)
-                confFile.writelines(extUser)
-                confFile.writelines(extGroup)
-                confFile.writelines(memSoftLimit)
-                confFile.writelines(memHardLimit)
-                confFile.writelines(procSoftLimit)
-                confFile.writelines(procHardLimit)
-                confFile.writelines(extprocessorEnd)
 
-                htaccessAutoLoad = """
-    rewrite  {
-      enable                  1
-      autoLoadHtaccess        1
-    }
-    """
-                confFile.write(htaccessAutoLoad)
+                if openBasedir == 1:
+                    currentConf = currentConf.replace('{open_basedir}', 'php_admin_value open_basedir "/tmp:$VH_ROOT"')
+                else:
+                    currentConf = currentConf.replace('{open_basedir}', '')
 
+                confFile = open(vhFile, "w+")
+                confFile.write(currentConf)
                 confFile.close()
+
             except BaseException, msg:
                 logging.CyberCPLogFileWriter.writeToFile(
                     str(msg) + " [IO Error with per host config file [perHostDomainConf]]")
@@ -1082,35 +785,18 @@ class vhost:
             try:
 
                 confFile = open(vhFile, "w+")
+                php = PHPManager.getPHPString(phpVersion)
 
-                doNotModify = '# Do not modify this file, this is auto-generated file.\n\n'
+                currentConf = vhostConfs.lswsChildConf
 
-                VirtualHost = '<VirtualHost *:80>\n\n'
-                ServerName = '    ServerName ' + domain + '\n'
-                ServerAlias = '    ServerAlias www.' + domain + '\n'
-                ServerAdmin = '    ServerAdmin ' + administratorEmail + '\n'
-                SeexecUserGroup = '    SuexecUserGroup ' + virtualHostUser + ' ' + virtualHostUser + '\n'
-                DocumentRoot = '    DocumentRoot ' + path + '\n'
-                CustomLogCombined = '    CustomLog /home/' + masterDomain + '/logs/' + masterDomain + '.access_log combined\n'
+                currentConf = currentConf.replace('{virtualHostName}', domain)
+                currentConf = currentConf.replace('{masterDomain}', masterDomain)
+                currentConf = currentConf.replace('{administratorEmail}', administratorEmail)
+                currentConf = currentConf.replace('{externalApp}', virtualHostUser)
+                currentConf = currentConf.replace('{path}', path)
+                currentConf = currentConf.replace('{php}', php)
 
-                confFile.writelines(doNotModify)
-                confFile.writelines(VirtualHost)
-                confFile.writelines(ServerName)
-                confFile.writelines(ServerAlias)
-                confFile.writelines(ServerAdmin)
-                confFile.writelines(SeexecUserGroup)
-                confFile.writelines(DocumentRoot)
-                confFile.writelines(CustomLogCombined)
-
-                ## external app
-
-                php = php = PHPManager.getPHPString(phpVersion)
-
-                AddType = '    AddHandler application/x-httpd-php' + php + ' .php .php7 .phtml\n\n'
-                VirtualHostEnd = '</VirtualHost>\n'
-
-                confFile.writelines(AddType)
-                confFile.writelines(VirtualHostEnd)
+                confFile.write(currentConf)
 
                 confFile.close()
             except BaseException, msg:
@@ -1122,14 +808,6 @@ class vhost:
 
     @staticmethod
     def createConfigInMainDomainHostFile(domain, masterDomain):
-        # virtualhost project.cyberpersons.com {
-        # vhRoot / home / project.cyberpersons.com
-        # configFile      $SERVER_ROOT / conf / vhosts /$VH_NAME / vhconf.conf
-        # allowSymbolLink 1
-        # enableScript 1
-        # restrained 1
-        # }
-
         if ProcessUtilities.decideServer() == ProcessUtilities.OLS:
             try:
 
@@ -1138,15 +816,10 @@ class vhost:
 
                 writeDataToFile = open("/usr/local/lsws/conf/httpd_config.conf", 'a')
 
-                writeDataToFile.writelines("\n")
-                writeDataToFile.writelines("virtualHost " + domain + " {\n")
-                writeDataToFile.writelines("  vhRoot                  /home/" + masterDomain + "\n")
-                writeDataToFile.writelines("  configFile              $SERVER_ROOT/conf/vhosts/$VH_NAME/vhost.conf\n")
-                writeDataToFile.writelines("  allowSymbolLink         1\n")
-                writeDataToFile.writelines("  enableScript            1\n")
-                writeDataToFile.writelines("  restrained              1\n")
-                writeDataToFile.writelines("}\n")
-                writeDataToFile.writelines("\n")
+                currentConf = vhostConfs.olsChildMainConf
+                currentConf = currentConf.replace('{virtualHostName}', domain)
+                currentConf = currentConf.replace('{masterDomain}', masterDomain)
+                writeDataToFile.write(currentConf)
 
                 writeDataToFile.close()
 

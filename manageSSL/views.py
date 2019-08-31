@@ -12,6 +12,7 @@ import shlex
 import subprocess
 from plogical.acl import ACLManager
 from plogical.CyberCPLogFileWriter import CyberCPLogFileWriter as logging
+from plogical.processUtilities import ProcessUtilities
 # Create your views here.
 
 
@@ -59,6 +60,11 @@ def issueSSL(request):
                 data = json.loads(request.body)
                 virtualHost = data['virtualHost']
 
+                if ACLManager.checkOwnership(virtualHost, admin, currentACL) == 1:
+                    pass
+                else:
+                    return ACLManager.loadErrorJson()
+
 
                 adminEmail = ""
                 path = ""
@@ -74,9 +80,9 @@ def issueSSL(request):
 
                 ## ssl issue
 
-                execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
+                execPath = "/usr/local/CyberCP/bin/python2 " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
                 execPath = execPath + " issueSSL --virtualHostName " + virtualHost + " --administratorEmail " + adminEmail + " --path " + path
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
 
                 if output.find("1,None") > -1:
                     pass
@@ -145,13 +151,19 @@ def obtainHostNameSSL(request):
 
                 path = "/home/" + virtualHost + "/public_html"
 
+                data = json.loads(request.body)
+                virtualHost = data['virtualHost']
+                admin = Administrator.objects.get(pk=userID)
+                if ACLManager.checkOwnership(virtualHost, admin, currentACL) == 1:
+                    pass
+                else:
+                    return ACLManager.loadErrorJson()
+
                 ## ssl issue
 
-                execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
+                execPath = "/usr/local/CyberCP/bin/python2 " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
                 execPath = execPath + " issueSSLForHostName --virtualHostName " + virtualHost + " --path " + path
-
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
 
                 if output.find("1,None") > -1:
                     data_ret = {"status": 1, "SSL": 1,
@@ -190,6 +202,7 @@ def sslForMailServer(request):
             return ACLManager.loadError()
 
         websitesName = ACLManager.findAllSites(currentACL, userID)
+        websitesName = websitesName + ACLManager.findChildDomains(websitesName)
 
         return render(request, 'manageSSL/sslForMailServer.html',{'websiteList':websitesName})
     except KeyError:
@@ -213,15 +226,19 @@ def obtainMailServerSSL(request):
                 data = json.loads(request.body)
                 virtualHost = data['virtualHost']
 
+                admin = Administrator.objects.get(pk=userID)
+                if ACLManager.checkOwnership(virtualHost, admin, currentACL) == 1:
+                    pass
+                else:
+                    return ACLManager.loadErrorJson()
+
                 path = "/home/" + virtualHost + "/public_html"
 
                 ## ssl issue
 
-                execPath = "sudo python " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
-
+                execPath = "/usr/local/CyberCP/bin/python2 " + virtualHostUtilities.cyberPanel + "/plogical/virtualHostUtilities.py"
                 execPath = execPath + " issueSSLForMailServer --virtualHostName " + virtualHost + " --path " + path
-
-                output = subprocess.check_output(shlex.split(execPath))
+                output = ProcessUtilities.outputExecutioner(execPath)
 
                 if output.find("1,None") > -1:
                     data_ret = {"status": 1, "SSL": 1,

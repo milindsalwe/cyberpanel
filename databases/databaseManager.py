@@ -9,17 +9,25 @@ from django.shortcuts import render, redirect
 from django.http import HttpResponse
 import json
 from plogical.acl import ACLManager
-import subprocess, shlex
 import plogical.CyberCPLogFileWriter as logging
 from plogical.mysqlUtilities import mysqlUtilities
 from websiteFunctions.models import Websites
 from databases.models import Databases
+import argparse
+from loginSystem.models import Administrator
+import plogical.randomPassword as randomPassword
 
 class DatabaseManager:
 
     def loadDatabaseHome(self, request = None, userID = None):
         try:
             return render(request, 'databases/index.html')
+        except BaseException, msg:
+            return HttpResponse(str(msg))
+
+    def phpMyAdmin(self, request = None, userID = None):
+        try:
+            return render(request, 'databases/phpMyAdmin.html')
         except BaseException, msg:
             return HttpResponse(str(msg))
 
@@ -39,6 +47,7 @@ class DatabaseManager:
         try:
 
             currentACL = ACLManager.loadedACL(userID)
+            admin = Administrator.objects.get(pk=userID)
             if ACLManager.currentContextPermission(currentACL, 'createDatabase') == 0:
                 return ACLManager.loadErrorJson('createDBStatus', 0)
 
@@ -47,6 +56,11 @@ class DatabaseManager:
             dbUsername = data['dbUsername']
             dbPassword = data['dbPassword']
             webUsername = data['webUserName']
+
+            if ACLManager.checkOwnership(databaseWebsite, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson()
 
             if rAPI == None:
                 dbName = webUsername + "_" + dbName
@@ -90,6 +104,12 @@ class DatabaseManager:
 
             databaseWebsite = data['databaseWebsite']
 
+            admin = Administrator.objects.get(pk=userID)
+            if ACLManager.checkOwnership(databaseWebsite, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson()
+
             website = Websites.objects.get(domain=databaseWebsite)
             databases = Databases.objects.filter(website=website)
 
@@ -120,11 +140,17 @@ class DatabaseManager:
     def submitDatabaseDeletion(self, userID = None, data = None):
         try:
             currentACL = ACLManager.loadedACL(userID)
-
+            admin = Administrator.objects.get(pk=userID)
             if ACLManager.currentContextPermission(currentACL, 'deleteDatabase') == 0:
                 return ACLManager.loadErrorJson('deleteStatus', 0)
 
             dbName = data['dbName']
+            db = Databases.objects.get(dbName=dbName)
+
+            if ACLManager.checkOwnership(db.website.domain, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson()
 
             result = mysqlUtilities.submitDBDeletion(dbName)
 
@@ -164,19 +190,18 @@ class DatabaseManager:
             userName = data['dbUserName']
             dbPassword = data['dbPassword']
 
-            passFile = "/etc/cyberpanel/mysqlPassword"
+            db = Databases.objects.get(dbUser=userName)
 
-            f = open(passFile)
-            data = f.read()
-            password = data.split('\n', 1)[0]
+            admin = Administrator.objects.get(pk=userID)
+            if ACLManager.checkOwnership(db.website.domain, admin, currentACL) == 1:
+                pass
+            else:
+                return ACLManager.loadErrorJson()
 
-            passwordCMD = "use mysql;SET PASSWORD FOR '" + userName + "'@'localhost' = PASSWORD('" + dbPassword + "');FLUSH PRIVILEGES;"
 
-            command = 'sudo mysql -u root -p' + password + ' -e "' + passwordCMD + '"'
-            cmd = shlex.split(command)
-            res = subprocess.call(cmd)
+            res = mysqlUtilities.changePassword(userName, dbPassword)
 
-            if res == 1:
+            if res == 0:
                 data_ret = {'status': 0, 'changePasswordStatus': 0,'error_message': "Please see CyberPanel main log file."}
                 json_data = json.dumps(data_ret)
                 return HttpResponse(json_data)
@@ -189,3 +214,48 @@ class DatabaseManager:
             data_ret = {'status': 0, 'changePasswordStatus': 0, 'error_message': str(msg)}
             json_data = json.dumps(data_ret)
             return HttpResponse(json_data)
+
+    @staticmethod
+    def generatePHPMYAdminData(userID):
+        try:
+
+            admin = Administrator.objects.get(id=userID)
+            path = '/etc/cyberpanel/' + admin.userName
+
+
+            currentACL = ACLManager.loadedACL(userID)
+            websiteOBJs = ACLManager.findWebsiteObjects(currentACL, userID)
+            finalUserPassword = randomPassword.generate_pass()
+
+            writeToFile = open(path, 'w')
+            writeToFile.write(finalUserPassword)
+            writeToFile.close()
+
+            mysqlUtilities.createDBUser(admin.userName, finalUserPassword)
+            mysqlUtilities.changePassword(admin.userName, finalUserPassword)
+
+            for webs in websiteOBJs:
+                for db in webs.databases_set.all():
+                    mysqlUtilities.allowGlobalUserAccess(admin.userName, db.dbName)
+
+            print "1," + finalUserPassword
+
+        except BaseException, msg:
+            print "0," + str(msg)
+
+def main():
+
+    parser = argparse.ArgumentParser(description='CyberPanel Installer')
+    parser.add_argument('function', help='Specific a function to call!')
+
+    parser.add_argument('--userID', help='Logged in user ID')
+
+
+    args = parser.parse_args()
+
+    if args.function == "generatePHPMYAdminData":
+        DatabaseManager.generatePHPMYAdminData(int(args.userID))
+
+
+if __name__ == "__main__":
+    main()
